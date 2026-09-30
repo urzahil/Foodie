@@ -12,6 +12,7 @@ import com.example.location.LocationTarget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -40,6 +41,14 @@ class RestaurantRepository(
     val allRestaurants: Flow<List<RestaurantEntity>> = dao.getAllRestaurants()
     val favorites: Flow<List<RestaurantEntity>> = dao.getFavorites()
     val visited: Flow<List<RestaurantEntity>> = dao.getVisited()
+
+    val uniqueCuisines: Flow<List<String>> = dao.getUniqueCuisinesFlow().map { list ->
+        list.flatMap { entry ->
+            entry.split(",", "/", "&")
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+        }.distinct().sorted()
+    }
 
     // In-memory cache of city centroids from Michelin database
     @Volatile

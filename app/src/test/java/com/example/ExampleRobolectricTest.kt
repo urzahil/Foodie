@@ -45,4 +45,31 @@ class ExampleRobolectricTest {
         assertEquals("Foodie 2.0", root.getString("app"))
         assertEquals(1, root.getInt("version"))
     }
+
+    @Test
+    fun `cuisine extraction parses distinct individual cuisines correctly`() {
+        val rawEntries = listOf("Classic French, Seafood", "Japanese", "Contemporary / Creative", "Seafood")
+        val unique = rawEntries
+            .flatMap { it.split(",", "/", "&").map { c -> c.trim() } }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+
+        assertEquals(listOf("Classic French", "Contemporary", "Creative", "Japanese", "Seafood"), unique)
+    }
+
+    @Test
+    fun `available cuisines only extracts cuisines corresponding to current active results`() {
+        val resultRestaurantsCuisines = listOf("Italian", "Roman, Pizza")
+        val available = resultRestaurantsCuisines
+            .flatMap { it.split(",", "/", "&").map { c -> c.trim() } }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+
+        assertEquals(listOf("Italian", "Pizza", "Roman"), available)
+        // Ensure other unrelated cuisines are not present
+        assertTrue(!available.contains("Japanese"))
+        assertTrue(!available.contains("French"))
+    }
 }

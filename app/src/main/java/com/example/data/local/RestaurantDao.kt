@@ -68,6 +68,9 @@ interface RestaurantDao {
     @Query("SELECT DISTINCT cuisine FROM restaurants WHERE cuisine != '' ORDER BY cuisine ASC")
     suspend fun getUniqueCuisines(): List<String>
 
+    @Query("SELECT DISTINCT cuisine FROM restaurants WHERE cuisine != '' ORDER BY cuisine ASC")
+    fun getUniqueCuisinesFlow(): Flow<List<String>>
+
     @Query("UPDATE restaurants SET isFavorite = 0, favoriteTimestamp = 0, isVisited = 0, visitedTimestamp = 0, visitedNotes = ''")
     suspend fun clearAllFavoritesAndVisited()
 

@@ -67,6 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.network.SyncState
 import com.example.ui.FoodieViewModel
 import com.example.ui.SpecialListMode
+import com.example.ui.components.CuisineDropdownFilter
 import com.example.ui.components.ExportImportDialog
 import com.example.ui.components.MichelinFilterChips
 import com.example.ui.components.SearchBarWithNearMe
@@ -88,6 +89,7 @@ fun MainScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val filteredList by viewModel.filteredRestaurants.collectAsStateWithLifecycle()
+    val availableCuisines by viewModel.availableCuisines.collectAsStateWithLifecycle()
     val syncState by viewModel.syncState.collectAsStateWithLifecycle()
 
     var showMenu by remember { mutableStateOf(false) }
@@ -358,6 +360,13 @@ fun MainScreen(
             MichelinFilterChips(
                 selectedFilters = uiState.selectedFilters,
                 onToggleFilter = { viewModel.toggleFilter(it) }
+            )
+
+            // Cuisine dropdown filter
+            CuisineDropdownFilter(
+                availableCuisines = availableCuisines,
+                selectedCuisine = uiState.selectedCuisine,
+                onCuisineSelected = { viewModel.selectCuisine(it) }
             )
 
             // Content Tabs: List (tab 0) and Map (tab 1)

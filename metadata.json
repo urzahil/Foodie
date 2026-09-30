@@ -1,0 +1,6 @@
+{
+  "name": "Foodie 2.0",
+  "description": "Michelin-starred restaurants near me with live maps, 30km distance search, awards filtering, and favorites",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

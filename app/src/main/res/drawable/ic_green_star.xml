@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Michelin Green Star leaf clover -->
+    <path
+        android:fillColor="#2E7D32"
+        android:pathData="M12,2 C13,4 14.5,5 16,5 C17.5,5 19,4 19.5,5.5 C20,7 19,8.5 19.5,10 C20,11.5 21.5,12.5 21,14 C20.5,15.5 19,16 18,17 C17,18 17,19.5 15.5,20 C14,20.5 13,19.5 12,20 C11,19.5 10,20.5 8.5,20 C7,19.5 7,18 6,17 C5,16 3.5,15.5 3,14 C2.5,12.5 4,11.5 4.5,10 C5,8.5 4,7 4.5,5.5 C5,4 6.5,5 8,5 C9.5,5 11,4 12,2 Z" />
+    <path
+        android:fillColor="#A5D6A7"
+        android:pathData="M12,7 C12,12 12,15 12,17 M10,11 C11,12 12,13 12,13 M14,11 C13,12 12,13 12,13"
+        android:strokeWidth="1.5"
+        android:strokeColor="#FFFFFF" />
+</vector>

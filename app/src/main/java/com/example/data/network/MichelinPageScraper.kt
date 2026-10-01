@@ -137,36 +137,42 @@ class MichelinPageScraper(
                 else -> null
             }
 
-            // Determine opening hours fallback if not parsed
-            val finalHours = when {
-                !extractedHours.isNullOrBlank() -> extractedHours
-                restaurant.openingHours.isNotBlank() -> restaurant.openingHours
-                else -> generateStandardOpeningHours(restaurant)
-            }
+            // Never invent opening hours. Keep existing data if the official page
+            // does not expose hours in a parseable form.
+            val finalHours = extractedHours?.takeIf { it.isNotBlank() } ?: restaurant.openingHours
 
-            // Download and save image locally
+            // Download and save image locally. A failed download must not make the
+            // cache look fresh.
             var localPath: String? = null
+            var imageDownloaded = false
             if (!finalImageUrl.isNullOrBlank()) {
                 try {
                     localPath = downloadImageToFile(restaurant.id, finalImageUrl)
+                    imageDownloaded = true
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed downloading image for ${restaurant.name}: ${e.message}")
                 }
             }
 
-            val now = System.currentTimeMillis()
+            val timestamp = System.currentTimeMillis()
+            val storedLocalPath = localPath ?: restaurant.localImagePath
+            val storedImageUrl = finalImageUrl ?: restaurant.imageUrl
+            val storedImageTimestamp =
+                if (imageDownloaded) timestamp else restaurant.imageLastDownloaded
+
             restaurantDao.updateImageData(
                 id = restaurant.id,
-                localPath = localPath ?: restaurant.localImagePath,
-                imageUrl = finalImageUrl ?: restaurant.imageUrl,
-                timestamp = now,
+                localPath = storedLocalPath,
+                imageUrl = storedImageUrl,
+                timestamp = timestamp,
+                imageDownloaded = imageDownloaded,
                 openingHours = finalHours
             )
 
             return@withContext restaurant.copy(
-                localImagePath = localPath ?: restaurant.localImagePath,
-                imageUrl = finalImageUrl ?: restaurant.imageUrl,
-                imageLastDownloaded = now,
+                localImagePath = storedLocalPath,
+                imageUrl = storedImageUrl,
+                imageLastDownloaded = storedImageTimestamp,
                 openingHours = finalHours
             )
         }
@@ -195,22 +201,6 @@ class MichelinPageScraper(
             Log.e(TAG, "Error parsing opening hours", e)
         }
         return null
-    }
-
-    private fun generateStandardOpeningHours(restaurant: RestaurantEntity): String {
-        return when {
-            restaurant.award.contains("3 Stars", ignoreCase = true) ->
-                "Wednesday – Sunday:\nDinner: 18:30 – 22:30\nLunch (Sat & Sun): 12:00 – 14:30\nMonday & Tuesday: Closed\n(Reservations strictly required)"
-
-            restaurant.award.contains("2 Stars", ignoreCase = true) ->
-                "Tuesday – Saturday:\nDinner: 18:00 – 22:30\nLunch (Fri & Sat): 12:00 – 14:00\nSunday & Monday: Closed"
-
-            restaurant.award.contains("Bib Gourmand", ignoreCase = true) ->
-                "Daily:\nLunch: 11:30 – 15:00\nDinner: 17:30 – 22:00\nWalk-ins welcome"
-
-            else ->
-                "Tuesday – Sunday:\nLunch: 12:00 – 14:30\nDinner: 18:30 – 22:00\nMonday: Closed"
-        }
     }
 
     private fun downloadImageToFile(restaurantId: Long, imageUrl: String): String {

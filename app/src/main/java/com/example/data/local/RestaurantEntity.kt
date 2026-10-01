@@ -37,6 +37,7 @@ data class RestaurantEntity(
     val facilitiesAndServices: String,
     val description: String,
     val openingHours: String = "",
+    val openingHoursLastFetched: Long = 0L,
     val localImagePath: String? = null,
     val imageUrl: String? = null,
     val imageLastDownloaded: Long = 0L,

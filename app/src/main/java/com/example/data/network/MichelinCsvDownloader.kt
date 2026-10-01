@@ -33,6 +33,12 @@ class MichelinCsvDownloader(
         private const val PREFS_NAME = "foodie_prefs"
         private const val KEY_LAST_SYNC = "last_csv_sync_time"
         const val ONE_MONTH_MS = 30L * 24 * 60 * 60 * 1000L
+
+        fun stableRestaurantKey(name: String, url: String, location: String, lat: Double, lng: Double): String {
+            return url.trim().ifBlank {
+                "${name}|${location}|${lat}|${lng}".trim()
+            }
+        }
     }
 
     private val client = OkHttpClient.Builder()
@@ -64,21 +70,25 @@ class MichelinCsvDownloader(
             return@withContext true
         }
 
-        return@withContext performSync()
+        performSync()
     }
 
     suspend fun performSync(): Boolean = withContext(Dispatchers.IO) {
         _syncState.value = SyncState.Syncing(0f, 0, "Connecting to Michelin Guide database...")
         try {
-            val existingList = restaurantDao.getAllDirect()
-            // Map key: name + url to retain user state
-            val existingState = existingList.associateBy(
-                { "${it.name}|${it.url}" },
+            val existingState = restaurantDao.getAllDirect().associateBy(
+                { it.sourceKey },
                 {
-                    Triple(
-                        it.isFavorite to it.favoriteTimestamp,
-                        it.isVisited to Pair(it.visitedTimestamp, it.visitedNotes),
-                        it.localImagePath to Pair(it.imageUrl, it.imageLastDownloaded)
+                    RestaurantState(
+                        isFavorite = it.isFavorite,
+                        favoriteTimestamp = it.favoriteTimestamp,
+                        isVisited = it.isVisited,
+                        visitedTimestamp = it.visitedTimestamp,
+                        visitedNotes = it.visitedNotes,
+                        localImagePath = it.localImagePath,
+                        imageUrl = it.imageUrl,
+                        imageLastDownloaded = it.imageLastDownloaded,
+                        openingHours = it.openingHours
                     )
                 }
             )
@@ -88,119 +98,127 @@ class MichelinCsvDownloader(
                 .header("User-Agent", "Foodie2.0/Android")
                 .build()
 
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                _syncState.value = SyncState.Error("HTTP Error: ${response.code}")
-                return@withContext false
-            }
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    _syncState.value = SyncState.Error("HTTP Error: ${response.code}")
+                    return@withContext false
+                }
 
-            val body = response.body ?: run {
-                _syncState.value = SyncState.Error("Empty response body")
-                return@withContext false
-            }
+                val body = response.body ?: run {
+                    _syncState.value = SyncState.Error("Empty response body")
+                    return@withContext false
+                }
 
-            _syncState.value = SyncState.Syncing(0.1f, 0, "Parsing Michelin restaurants...")
+                _syncState.value = SyncState.Syncing(0.1f, 0, "Parsing Michelin restaurants...")
 
-            val inputStream = body.byteStream()
-            val reader = BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8), 32768)
+                BufferedReader(
+                    InputStreamReader(body.byteStream(), Charsets.UTF_8),
+                    32768
+                ).use { reader ->
+                    val batch = ArrayList<RestaurantEntity>(500)
+                    var totalParsed = 0
+                    val estimatedTotal = 19600
 
-            val batch = ArrayList<RestaurantEntity>(500)
-            var totalParsed = 0
-            val estimatedTotal = 19600
+                    parseCsv(reader) { row ->
+                        if (row.size >= 11) {
+                            val name = row.getOrNull(0)?.trim().orEmpty()
+                            val address = row.getOrNull(1)?.trim().orEmpty()
+                            val location = row.getOrNull(2)?.trim().orEmpty()
+                            val price = row.getOrNull(3)?.trim().orEmpty()
+                            val cuisine = row.getOrNull(4)?.trim().orEmpty()
+                            val lng = row.getOrNull(5)?.trim()?.toDoubleOrNull() ?: 0.0
+                            val lat = row.getOrNull(6)?.trim()?.toDoubleOrNull() ?: 0.0
+                            val phone = row.getOrNull(7)?.trim().orEmpty()
+                            val url = row.getOrNull(8)?.trim().orEmpty()
+                            val website = row.getOrNull(9)?.trim().orEmpty()
+                            val award = row.getOrNull(10)?.trim().orEmpty()
+                            val greenStar = row.getOrNull(11)?.trim() == "1"
+                            val facilities = row.getOrNull(12)?.trim().orEmpty()
+                            val description = row.getOrNull(13)?.trim().orEmpty()
 
-            parseCsv(reader) { row ->
-                if (row.size >= 11) {
-                    val name = row.getOrNull(0)?.trim().orEmpty()
-                    val address = row.getOrNull(1)?.trim().orEmpty()
-                    val location = row.getOrNull(2)?.trim().orEmpty()
-                    val price = row.getOrNull(3)?.trim().orEmpty()
-                    val cuisine = row.getOrNull(4)?.trim().orEmpty()
-                    val lng = row.getOrNull(5)?.trim()?.toDoubleOrNull() ?: 0.0
-                    val lat = row.getOrNull(6)?.trim()?.toDoubleOrNull() ?: 0.0
-                    val phone = row.getOrNull(7)?.trim().orEmpty()
-                    val url = row.getOrNull(8)?.trim().orEmpty()
-                    val website = row.getOrNull(9)?.trim().orEmpty()
-                    val award = row.getOrNull(10)?.trim().orEmpty()
-                    val greenStar = (row.getOrNull(11)?.trim() == "1")
-                    val facilities = row.getOrNull(12)?.trim().orEmpty()
-                    val description = row.getOrNull(13)?.trim().orEmpty()
+                            if (name.isNotEmpty() && (lat != 0.0 || lng != 0.0)) {
+                                val sourceKey = stableRestaurantKey(name, url, location, lat, lng)
+                                val previous = existingState[sourceKey]
 
-                    if (name.isNotEmpty() && (lat != 0.0 || lng != 0.0)) {
-                        val key = "$name|$url"
-                        val prev = existingState[key]
-                        val isFav = prev?.first?.first ?: false
-                        val favTime = prev?.first?.second ?: 0L
-                        val isVisited = prev?.second?.first ?: false
-                        val visitedTime = prev?.second?.second?.first ?: 0L
-                        val visitedNotes = prev?.second?.second?.second.orEmpty()
-                        val localImage = prev?.third?.first
-                        val imgUrl = prev?.third?.second?.first
-                        val imgTime = prev?.third?.second?.second ?: 0L
+                                batch.add(
+                                    RestaurantEntity(
+                                        sourceKey = sourceKey,
+                                        name = name,
+                                        address = address,
+                                        location = location,
+                                        price = price,
+                                        cuisine = cuisine,
+                                        longitude = lng,
+                                        latitude = lat,
+                                        phoneNumber = phone,
+                                        url = url,
+                                        websiteUrl = website,
+                                        award = award,
+                                        greenStar = greenStar,
+                                        facilitiesAndServices = facilities,
+                                        description = description,
+                                        openingHours = previous?.openingHours.orEmpty(),
+                                        localImagePath = previous?.localImagePath,
+                                        imageUrl = previous?.imageUrl,
+                                        imageLastDownloaded = previous?.imageLastDownloaded ?: 0L,
+                                        isFavorite = previous?.isFavorite ?: false,
+                                        favoriteTimestamp = previous?.favoriteTimestamp ?: 0L,
+                                        isVisited = previous?.isVisited ?: false,
+                                        visitedTimestamp = previous?.visitedTimestamp ?: 0L,
+                                        visitedNotes = previous?.visitedNotes.orEmpty()
+                                    )
+                                )
+                            }
+                        }
 
-                        batch.add(
-                            RestaurantEntity(
-                                id = 0,
-                                name = name,
-                                address = address,
-                                location = location,
-                                price = price,
-                                cuisine = cuisine,
-                                longitude = lng,
-                                latitude = lat,
-                                phoneNumber = phone,
-                                url = url,
-                                websiteUrl = website,
-                                award = award,
-                                greenStar = greenStar,
-                                facilitiesAndServices = facilities,
-                                description = description,
-                                localImagePath = localImage,
-                                imageUrl = imgUrl,
-                                imageLastDownloaded = imgTime,
-                                isFavorite = isFav,
-                                favoriteTimestamp = favTime,
-                                isVisited = isVisited,
-                                visitedTimestamp = visitedTime,
-                                visitedNotes = visitedNotes
+                        if (batch.size >= 500) {
+                            restaurantDao.insertAll(batch)
+                            totalParsed += batch.size
+                            batch.clear()
+                            val progress = 0.1f +
+                                (0.85f * (totalParsed.toFloat() / estimatedTotal).coerceAtMost(1f))
+                            _syncState.value = SyncState.Syncing(
+                                progress,
+                                totalParsed,
+                                "Saved ${totalParsed} restaurants..."
                             )
-                        )
+                        }
                     }
-                }
 
-                if (batch.size >= 500) {
-                    restaurantDao.insertAll(batch)
-                    totalParsed += batch.size
-                    batch.clear()
-                    val prog = 0.1f + (0.85f * (totalParsed.toFloat() / estimatedTotal).coerceAtMost(1f))
-                    _syncState.value = SyncState.Syncing(
-                        prog,
-                        totalParsed,
-                        "Saved $totalParsed restaurants..."
-                    )
+                    if (batch.isNotEmpty()) {
+                        restaurantDao.insertAll(batch)
+                        totalParsed += batch.size
+                        batch.clear()
+                    }
+
+                    setLastSyncTime(System.currentTimeMillis())
+                    _syncState.value = SyncState.Success(totalParsed)
+                    Log.d(TAG, "Sync complete. Total restaurants: ${totalParsed}")
+                    return@withContext true
                 }
             }
-
-            if (batch.isNotEmpty()) {
-                restaurantDao.insertAll(batch)
-                totalParsed += batch.size
-                batch.clear()
-            }
-
-            reader.close()
-            setLastSyncTime(System.currentTimeMillis())
-            _syncState.value = SyncState.Success(totalParsed)
-            Log.d(TAG, "Sync complete. Total restaurants: $totalParsed")
-            return@withContext true
         } catch (e: Exception) {
             Log.e(TAG, "Error syncing CSV", e)
             _syncState.value = SyncState.Error("Sync error: ${e.localizedMessage}")
-            return@withContext false
+            false
         }
     }
 
+    private data class RestaurantState(
+        val isFavorite: Boolean,
+        val favoriteTimestamp: Long,
+        val isVisited: Boolean,
+        val visitedTimestamp: Long,
+        val visitedNotes: String,
+        val localImagePath: String?,
+        val imageUrl: String?,
+        val imageLastDownloaded: Long,
+        val openingHours: String
+    )
+
     private inline fun parseCsv(reader: BufferedReader, onRow: (List<String>) -> Unit) {
         val row = ArrayList<String>(14)
-        val sb = java.lang.StringBuilder(128)
+        val sb = StringBuilder(128)
         var inQuotes = false
         var isFirstLine = true
 
@@ -235,9 +253,7 @@ class MichelinCsvDownloader(
                 if (c == '\r') {
                     reader.mark(1)
                     val nextC = reader.read()
-                    if (nextC != '\n'.code) {
-                        reader.reset()
-                    }
+                    if (nextC != '\n'.code) reader.reset()
                 }
                 row.add(sb.toString())
                 sb.setLength(0)

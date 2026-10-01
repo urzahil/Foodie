@@ -72,7 +72,16 @@ class MichelinCsvDownloader(
         try {
             val existingList = restaurantDao.getAllDirect()
             // Map key: name + url to retain user state
-            val existingState = existingList.associateBy { "${it.name}|${it.url}" }
+            val existingState = existingList.associateBy(
+                { "${it.name}|${it.url}" },
+                {
+                    Triple(
+                        it.isFavorite to it.favoriteTimestamp,
+                        it.isVisited to Pair(it.visitedTimestamp, it.visitedNotes),
+                        it.localImagePath to Pair(it.imageUrl, it.imageLastDownloaded)
+                    )
+                }
+            )
 
             val request = Request.Builder()
                 .url(CSV_URL)
@@ -119,6 +128,14 @@ class MichelinCsvDownloader(
                     if (name.isNotEmpty() && (lat != 0.0 || lng != 0.0)) {
                         val key = "$name|$url"
                         val prev = existingState[key]
+                        val isFav = prev?.first?.first ?: false
+                        val favTime = prev?.first?.second ?: 0L
+                        val isVisited = prev?.second?.first ?: false
+                        val visitedTime = prev?.second?.second?.first ?: 0L
+                        val visitedNotes = prev?.second?.second?.second.orEmpty()
+                        val localImage = prev?.third?.first
+                        val imgUrl = prev?.third?.second?.first
+                        val imgTime = prev?.third?.second?.second ?: 0L
 
                         batch.add(
                             RestaurantEntity(
@@ -137,16 +154,14 @@ class MichelinCsvDownloader(
                                 greenStar = greenStar,
                                 facilitiesAndServices = facilities,
                                 description = description,
-                                openingHours = prev?.openingHours.orEmpty(),
-                                openingHoursLastFetched = prev?.openingHoursLastFetched ?: 0L,
-                                localImagePath = prev?.localImagePath,
-                                imageUrl = prev?.imageUrl,
-                                imageLastDownloaded = prev?.imageLastDownloaded ?: 0L,
-                                isFavorite = prev?.isFavorite ?: false,
-                                favoriteTimestamp = prev?.favoriteTimestamp ?: 0L,
-                                isVisited = prev?.isVisited ?: false,
-                                visitedTimestamp = prev?.visitedTimestamp ?: 0L,
-                                visitedNotes = prev?.visitedNotes.orEmpty()
+                                localImagePath = localImage,
+                                imageUrl = imgUrl,
+                                imageLastDownloaded = imgTime,
+                                isFavorite = isFav,
+                                favoriteTimestamp = favTime,
+                                isVisited = isVisited,
+                                visitedTimestamp = visitedTime,
+                                visitedNotes = visitedNotes
                             )
                         )
                     }

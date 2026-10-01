@@ -30,6 +30,8 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Build debug APK
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: |
           gradle assembleDebug
 

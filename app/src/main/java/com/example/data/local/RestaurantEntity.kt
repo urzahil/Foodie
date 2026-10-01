@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "restaurants",
     indices = [
+        Index(value = ["sourceKey"], unique = true),
         Index(value = ["award"]),
         Index(value = ["location"]),
         Index(value = ["isFavorite"]),
@@ -16,6 +17,11 @@ import androidx.room.PrimaryKey
 data class RestaurantEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    /**
+     * Stable Michelin identity. The URL is preferred; the fallback is a deterministic
+     * composite key for rows without a URL.
+     */
+    val sourceKey: String,
     val name: String,
     val address: String,
     val location: String,

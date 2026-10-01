@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -167,54 +166,33 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // Combine raw restaurants from Room with location/distance, awards, and query
-    // and compute both filtered restaurants and the unique cuisines that correspond to the results
-    private val filterComputation: StateFlow<Pair<List<RestaurantWithDistance>, List<String>>> = combine(
+    // Combine raw restaurants from Room with filters and 30km distance limit
+    val filteredRestaurants: StateFlow<List<RestaurantWithDistance>> = combine(
         repository.allRestaurants,
         _uiState
     ) { all, state ->
         withContext(Dispatchers.Default) {
-            // 1. Special list mode (Favorites / Visited / All)
-            val baseList = when (state.specialMode) {
-                SpecialListMode.FAVORITES_ONLY -> all.filter { it.isFavorite }
-                SpecialListMode.VISITED_ONLY -> all.filter { it.isVisited }
-                SpecialListMode.ALL -> all
+            var list = all
+
+            // Special list mode (Favorites / Visited)
+            list = when (state.specialMode) {
+                SpecialListMode.FAVORITES_ONLY -> list.filter { it.isFavorite }
+                SpecialListMode.VISITED_ONLY -> list.filter { it.isVisited }
+                SpecialListMode.ALL -> list
             }
 
-            // 2. Distance calculation & 30km limit
-            val loc = state.activeLocation
-            val baseWithDistance: List<Pair<RestaurantEntity, Double?>> = if (loc != null) {
-                baseList.mapNotNull { r ->
-                    val dist = LocationHelper.calculateDistanceKm(
-                        loc.latitude, loc.longitude,
-                        r.latitude, r.longitude
-                    )
-                    if (state.specialMode != SpecialListMode.ALL) {
-                        Pair(r, dist)
-                    } else if (dist <= LocationHelper.MAX_RADIUS_KM) {
-                        Pair(r, dist)
-                    } else {
-                        null
-                    }
-                }
-            } else {
-                baseList.map { Pair(it, null) }
-            }
-
-            // 3. Award Filters (multi-select)
-            var matching = if (state.selectedFilters.isNotEmpty()) {
+            // Award Filters (multi-select)
+            if (state.selectedFilters.isNotEmpty()) {
                 val dbMatches = state.selectedFilters.map { it.dbMatch }
-                baseWithDistance.filter { (r, _) ->
+                list = list.filter { r ->
                     dbMatches.any { match -> r.award.contains(match, ignoreCase = true) }
                 }
-            } else {
-                baseWithDistance
             }
 
-            // 4. Text search if entered (restaurant name, cuisine, location, or address)
+            // Text search if entered (restaurant name, cuisine, location, or address)
             if (state.searchQuery.isNotBlank() && state.searchQuery.length >= 2) {
                 val q = state.searchQuery.lowercase().trim()
-                matching = matching.filter { (r, _) ->
+                list = list.filter { r ->
                     r.name.lowercase().contains(q) ||
                             r.cuisine.lowercase().contains(q) ||
                             r.location.lowercase().contains(q) ||
@@ -222,54 +200,65 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
 
-            // Extract unique cuisines that correspond strictly to these matching results
-            val cuisinesInResults = matching
-                .flatMap { (r, _) ->
-                    r.cuisine.split(",", "/", "&").map { c -> c.trim() }
+            // Distance calculation & 30km limit
+            val loc = state.activeLocation
+            val baseList: List<RestaurantWithDistance> = if (loc != null) {
+                val withDist = list.mapNotNull { r ->
+                    val dist = LocationHelper.calculateDistanceKm(
+                        loc.latitude, loc.longitude,
+                        r.latitude, r.longitude
+                    )
+                    // If in Special mode (Favorites/Visited) or general location search:
+                    if (state.specialMode != SpecialListMode.ALL) {
+                        RestaurantWithDistance(r, dist)
+                    } else if (dist <= LocationHelper.MAX_RADIUS_KM) {
+                        RestaurantWithDistance(r, dist)
+                    } else {
+                        null
+                    }
                 }
-                .filter { it.isNotBlank() }
-                .distinct()
-                .sorted()
-
-            // 5. Apply Cuisine Filter (Single selection or null for all)
-            val finalMatching = if (!state.selectedCuisine.isNullOrBlank()) {
-                val selected = state.selectedCuisine.trim().lowercase()
-                matching.filter { (r, _) ->
-                    r.cuisine.lowercase().contains(selected)
-                }
+                withDist.sortedBy { it.distanceKm }
             } else {
-                matching
+                list.map { RestaurantWithDistance(it, null) }
             }
 
-            val sortedResults = finalMatching
-                .map { RestaurantWithDistance(it.first, it.second) }
-                .let { list ->
-                    if (loc != null) list.sortedBy { it.distanceKm } else list
+            // Extract unique cuisines strictly from the results
+            val cuisinesForResults = baseList
+                .flatMap { item ->
+                    item.restaurant.cuisine.split(",", "/", "&")
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
                 }
+                .distinct()
+                .sortedWith(String.CASE_INSENSITIVE_ORDER)
 
-            Pair(sortedResults, cuisinesInResults)
+            // Keep availableCuisines synchronized with the results
+            if (state.availableCuisines != cuisinesForResults) {
+                val selectedStillValid = state.selectedCuisine != null &&
+                        cuisinesForResults.any { it.equals(state.selectedCuisine, ignoreCase = true) }
+                viewModelScope.launch(Dispatchers.Main.immediate) {
+                    _uiState.value = _uiState.value.copy(
+                        availableCuisines = cuisinesForResults,
+                        selectedCuisine = if (selectedStillValid) state.selectedCuisine else null
+                    )
+                }
+            }
+
+            // Finally, filter by cuisine if selected
+            if (!state.selectedCuisine.isNullOrBlank()) {
+                val selected = state.selectedCuisine.trim().lowercase()
+                baseList.filter { r ->
+                    r.restaurant.cuisine.lowercase().contains(selected)
+                }
+            } else {
+                baseList
+            }
         }
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.Eagerly,
-        initialValue = Pair(emptyList(), emptyList())
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
     )
-
-    val filteredRestaurants: StateFlow<List<RestaurantWithDistance>> = filterComputation
-        .map { it.first }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-
-    val availableCuisines: StateFlow<List<String>> = filterComputation
-        .map { it.second }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
 
     fun onSearchQueryChanged(query: String) {
         _uiState.value = _uiState.value.copy(searchQuery = query)
@@ -323,8 +312,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
             mapRecenterTrigger = System.currentTimeMillis(),
             searchQuery = "",
             autocompleteSuggestions = emptyList(),
-            isSearchingAutocomplete = false,
-            selectedCuisine = null
+            isSearchingAutocomplete = false
         )
         saveCurrentState()
     }
@@ -344,7 +332,6 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
                     searchQuery = "",
                     autocompleteSuggestions = emptyList(),
                     isLocatingGps = false,
-                    selectedCuisine = null,
                     toastMessage = "Located: ${loc.name}"
                 )
                 saveCurrentState()
@@ -367,8 +354,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
             activeLocation = target,
             mapRecenterTrigger = System.currentTimeMillis(),
             searchQuery = "",
-            autocompleteSuggestions = emptyList(),
-            selectedCuisine = null
+            autocompleteSuggestions = emptyList()
         )
         saveCurrentState()
     }

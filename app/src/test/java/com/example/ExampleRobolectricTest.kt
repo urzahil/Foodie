@@ -59,17 +59,18 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `available cuisines only extracts cuisines corresponding to current active results`() {
-        val resultRestaurantsCuisines = listOf("Italian", "Roman, Pizza")
-        val available = resultRestaurantsCuisines
+    fun `available cuisines only reflect restaurants in the current results`() {
+        // Given 3 restaurants in current results (e.g. Rome 2 Stars)
+        val resultRestaurantsCuisines = listOf("Italian", "Mediterranean / Italian", "Contemporary")
+        val extracted = resultRestaurantsCuisines
             .flatMap { it.split(",", "/", "&").map { c -> c.trim() } }
             .filter { it.isNotBlank() }
             .distinct()
-            .sorted()
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
 
-        assertEquals(listOf("Italian", "Pizza", "Roman"), available)
-        // Ensure other unrelated cuisines are not present
-        assertTrue(!available.contains("Japanese"))
-        assertTrue(!available.contains("French"))
+        // Only cuisines present in the results are available
+        assertEquals(listOf("Contemporary", "Italian", "Mediterranean"), extracted)
+        assertTrue(!extracted.contains("Japanese"))
+        assertTrue(!extracted.contains("Classic French"))
     }
 }

@@ -40,12 +40,12 @@ jobs:
       - name: Build signed release APK
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/foodie-release.jks
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           test -n "$STORE_PASSWORD" || { echo "STORE_PASSWORD secret is not configured"; exit 1; }
           test -n "$KEY_PASSWORD" || { echo "KEY_PASSWORD secret is not configured"; exit 1; }
-          chmod +x ./gradlew
           gradle assembleRelease
 
       - name: Upload release APK artifact

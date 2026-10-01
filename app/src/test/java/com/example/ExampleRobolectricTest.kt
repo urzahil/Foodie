@@ -3,6 +3,7 @@ package com.example
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.location.LocationHelper
+import com.example.data.network.MichelinCsvDownloader
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -73,4 +74,29 @@ class ExampleRobolectricTest {
         assertTrue(!extracted.contains("Japanese"))
         assertTrue(!extracted.contains("Classic French"))
     }
+    @Test
+    fun `stable restaurant key prefers Michelin URL and has deterministic fallback`() {
+        assertEquals(
+            "https://guide.michelin.com/restaurant/example",
+            MichelinCsvDownloader.stableRestaurantKey(
+                name = "Example",
+                url = " https://guide.michelin.com/restaurant/example ",
+                location = "Paris",
+                lat = 48.85,
+                lng = 2.35
+            )
+        )
+
+        assertEquals(
+            "Example|Paris|48.85|2.35",
+            MichelinCsvDownloader.stableRestaurantKey(
+                name = "Example",
+                url = "",
+                location = "Paris",
+                lat = 48.85,
+                lng = 2.35
+            )
+        )
+    }
+
 }

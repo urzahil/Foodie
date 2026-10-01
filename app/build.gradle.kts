@@ -20,6 +20,11 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    // Use the real key in local/CI builds when provided; keep a harmless placeholder
+    // so unit tests and unsigned/debug builds can run without a secret.
+    manifestPlaceholders["MAPS_API_KEY"] =
+      System.getenv("MAPS_API_KEY")?.takeIf { it.isNotBlank() } ?: "DEFAULT_API_KEY"
   }
 
   signingConfigs {

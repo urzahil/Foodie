@@ -88,8 +88,9 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
     init {
         restoreLastState()
         viewModelScope.launch {
+            // Sync metadata only. Images/details are fetched on demand for visible
+            // restaurants or when the user opens a restaurant.
             repository.syncIfNeeded(force = false)
-            repository.refreshExpiredImagesOnStartup()
         }
     }
 

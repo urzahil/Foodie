@@ -80,6 +80,7 @@ class MichelinCsvDownloader(
                 { it.sourceKey },
                 {
                     RestaurantState(
+                        id = it.id,
                         isFavorite = it.isFavorite,
                         favoriteTimestamp = it.favoriteTimestamp,
                         isVisited = it.isVisited,
@@ -142,6 +143,7 @@ class MichelinCsvDownloader(
 
                                 batch.add(
                                     RestaurantEntity(
+                                        id = previous?.id ?: 0L,
                                         sourceKey = sourceKey,
                                         name = name,
                                         address = address,
@@ -205,6 +207,7 @@ class MichelinCsvDownloader(
     }
 
     private data class RestaurantState(
+        val id: Long,
         val isFavorite: Boolean,
         val favoriteTimestamp: Long,
         val isVisited: Boolean,

@@ -196,28 +196,99 @@ class MichelinPageScraper(
 
     private fun parseOpeningHours(html: String): String? {
         try {
-            // Check for JSON-LD openingHours
-            val ldMatcher = Pattern.compile(
-                """"openingHours":\s*(\[[^\]]+\]|"[^"]+")"""
-            ).matcher(html)
-            if (ldMatcher.find()) {
-                val raw = ldMatcher.group(1)
-                return raw.replace("\"", "").replace("[", "").replace("]", "").replace(",", "\n").trim()
+            val dayCardPattern = Pattern.compile(
+                """<div[^>]*class=["'][^"']*card-borderline[^"']*["'][^>]*>.*?<div[^>]*class=["'][^"']*card--title[^"']*["'][^>]*>\s*([^<]+?)\s*</div>(.*?)</div>\s*</div>""",
+                Pattern.CASE_INSENSITIVE or Pattern.DOTALL
+            )
+            val contentPattern = Pattern.compile(
+                """<div[^>]*class=["'][^"']*card--content[^"']*["'][^>]*>\s*([^<]+?)\s*</div>""",
+                Pattern.CASE_INSENSITIVE or Pattern.DOTALL
+            )
+
+            val result = linkedMapOf<String, MutableList<String>>()
+            val cards = dayCardPattern.matcher(html)
+
+            while (cards.find()) {
+                val day = normalizeDay(cards.group(1)) ?: continue
+                val periods = mutableListOf<String>()
+                val periodMatcher = contentPattern.matcher(cards.group(2))
+
+                while (periodMatcher.find()) {
+                    val period = cleanHtmlText(periodMatcher.group(1))
+                    if (period.isNotBlank()) periods += period
+                }
+
+                result.getOrPut(day) { mutableListOf() }.addAll(periods)
             }
 
-            // Check for data-sheet block or opening hours text
-            val hoursPattern = Pattern.compile(
-                """(?:Opening hours|Horaires d'ouverture)[^<]*<[^>]+>([^<]+)""",
+            if (result.isNotEmpty()) {
+                return result.entries.joinToString("\n") { entry ->
+                    val periods = entry.value
+                    entry.key + ": " + if (periods.isEmpty()) "Closed" else periods.joinToString(", ")
+                }
+            }
+
+            val ldMatcher = Pattern.compile(
+                """"openingHours":\s*(\[[^\]]+\]|"[^"]+")""",
                 Pattern.CASE_INSENSITIVE
             ).matcher(html)
-            if (hoursPattern.find()) {
-                val text = hoursPattern.group(1).trim()
-                if (text.isNotBlank() && text.length > 5) return text
+
+            if (ldMatcher.find()) {
+                return ldMatcher.group(1)
+                    .replace("\"", "")
+                    .replace("[", "")
+                    .replace("]", "")
+                    .replace(",", "\n")
+                    .trim()
+            }
+
+            val text = html
+                .replace(Regex("""<[^>]+>"""), "\n")
+                .replace("&nbsp;", " ")
+                .replace(Regex("""\s+"""), " ")
+                .trim()
+
+            val dayPattern = Pattern.compile(
+                """(?i)\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b\s+([^\n]{1,120}?)(?=\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b|$)"""
+            )
+            val fallback = dayPattern.matcher(text)
+            val fallbackResult = linkedMapOf<String, String>()
+
+            while (fallback.find()) {
+                val day = normalizeDay(fallback.group(1)) ?: continue
+                val value = cleanHtmlText(fallback.group(2))
+                if (value.isNotBlank()) fallbackResult[day] = value
+            }
+
+            if (fallbackResult.isNotEmpty()) {
+                return fallbackResult.entries.joinToString("\n") { entry ->
+                    entry.key + ": " + entry.value
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing opening hours", e)
         }
         return null
+    }
+
+    private fun normalizeDay(value: String): String? {
+        return when (value.trim().lowercase()) {
+            "monday", "mon", "mo" -> "Monday"
+            "tuesday", "tue", "tues", "tu" -> "Tuesday"
+            "wednesday", "wed", "we" -> "Wednesday"
+            "thursday", "thu", "thur", "thurs", "th" -> "Thursday"
+            "friday", "fri", "fr" -> "Friday"
+            "saturday", "sat", "sa" -> "Saturday"
+            "sunday", "sun", "su" -> "Sunday"
+            else -> null
+        }
+    }
+
+    private fun cleanHtmlText(value: String): String {
+        return value
+            .replace(Regex("""\s+"""), " ")
+            .replace("&nbsp;", " ")
+            .trim()
     }
 
     private fun downloadImageToFile(restaurantId: Long, imageUrl: String): String {

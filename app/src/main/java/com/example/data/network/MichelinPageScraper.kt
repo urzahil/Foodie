@@ -81,7 +81,7 @@ class MichelinPageScraper(
                                 val matcher = PROD_PICS_PATTERN.matcher(html)
                                 if (matcher.find()) {
                                     val hash = matcher.group(1)
-                                    scrapedImageUrl = "https://prod-pics.guide.michelin.com/api/public/content/\$hash.jpg"
+                                    scrapedImageUrl = "https://prod-pics.guide.michelin.com/api/public/content/$hash.jpg"
                                 }
 
                                 if (scrapedImageUrl.isNullOrBlank()) {
@@ -95,7 +95,7 @@ class MichelinPageScraper(
                                             val m = PROD_PICS_PATTERN.matcher(urlCandidate)
                                             if (m.find()) {
                                                 val hash = m.group(1)
-                                                scrapedImageUrl = "https://prod-pics.guide.michelin.com/api/public/content/\$hash.jpg"
+                                                scrapedImageUrl = "https://prod-pics.guide.michelin.com/api/public/content/$hash.jpg"
                                                 break
                                             }
                                         }
@@ -109,13 +109,13 @@ class MichelinPageScraper(
                         }
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Direct scraping failed for \${restaurant.name}: \${e.message}")
+                    Log.w(TAG, "Direct scraping failed for ${restaurant.name}: ${e.message}")
                 }
 
                 if ((imageExpired && scrapedImageUrl.isNullOrBlank()) ||
                     (hoursExpired && extractedHours.isNullOrBlank())) {
                     try {
-                        val proxyUrl = "https://r.jina.ai/\${restaurant.url}"
+                        val proxyUrl = "https://r.jina.ai/${restaurant.url}"
                         val proxyReq = Request.Builder()
                             .url(proxyUrl)
                             .header("User-Agent", "Mozilla/5.0")
@@ -129,7 +129,7 @@ class MichelinPageScraper(
                                     val matcher = PROD_PICS_PATTERN.matcher(content)
                                     if (matcher.find()) {
                                         val hash = matcher.group(1)
-                                        scrapedImageUrl = "https://prod-pics.guide.michelin.com/api/public/content/\$hash.jpg"
+                                        scrapedImageUrl = "https://prod-pics.guide.michelin.com/api/public/content/$hash.jpg"
                                     }
                                 }
 
@@ -139,7 +139,7 @@ class MichelinPageScraper(
                             }
                         }
                     } catch (e: Exception) {
-                        Log.w(TAG, "Proxy scraper failed for \${restaurant.name}: \${e.message}")
+                        Log.w(TAG, "Proxy scraper failed for ${restaurant.name}: ${e.message}")
                     }
                 }
             }
@@ -161,7 +161,7 @@ class MichelinPageScraper(
                     localPath = downloadImageToFile(restaurant.id, finalImageUrl)
                     imageDownloaded = true
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed downloading image for \${restaurant.name}: \${e.message}")
+                    Log.w(TAG, "Failed downloading image for ${restaurant.name}: ${e.message}")
                 }
             }
 

@@ -47,6 +47,10 @@ interface RestaurantDao {
             openingHours = CASE
                 WHEN :openingHours IS NOT NULL AND :openingHours != '' THEN :openingHours
                 ELSE openingHours
+            END,
+            openingHoursLastFetched = CASE
+                WHEN :hoursFetched = 1 THEN :timestamp
+                ELSE openingHoursLastFetched
             END
         WHERE id = :id
     """)
@@ -56,7 +60,8 @@ interface RestaurantDao {
         imageUrl: String?,
         timestamp: Long,
         imageDownloaded: Boolean,
-        openingHours: String?
+        openingHours: String?,
+        hoursFetched: Boolean
     )
 
     @Query("SELECT * FROM restaurants WHERE isFavorite = 1 ORDER BY favoriteTimestamp DESC")

@@ -8,6 +8,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,8 +17,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +46,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
@@ -57,6 +62,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -89,7 +95,6 @@ fun MainScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val filteredList by viewModel.filteredRestaurants.collectAsStateWithLifecycle()
-    val availableCuisines by viewModel.availableCuisines.collectAsStateWithLifecycle()
     val syncState by viewModel.syncState.collectAsStateWithLifecycle()
 
     var showMenu by remember { mutableStateOf(false) }
@@ -143,137 +148,185 @@ fun MainScreen(
         containerColor = DarkBackground,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = {
+            Surface(
+                color = DarkBackground,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "Foodie",
                             color = TextPrimary,
-                            fontSize = 20.sp,
+                            fontSize = 19.sp,
                             fontWeight = FontWeight.Black
                         )
                         Text(
                             text = " 2.0",
                             color = MichelinRed,
-                            fontSize = 20.sp,
+                            fontSize = 19.sp,
                             fontWeight = FontWeight.Black
                         )
                         if (uiState.specialMode != SpecialListMode.ALL) {
                             Text(
                                 text = if (uiState.specialMode == SpecialListMode.FAVORITES_ONLY) " • Favourites" else " • Visited",
                                 color = if (uiState.specialMode == SpecialListMode.FAVORITES_ONLY) MichelinRed else GreenStarColor,
-                                fontSize = 14.sp,
+                                fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(start = 6.dp)
                             )
                         }
                     }
-                },
-                actions = {
-                    IconButton(
-                        onClick = { showMenu = true },
-                        modifier = Modifier.testTag("top_menu_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Options menu",
-                            tint = Color.White
-                        )
+
+                    Box {
+                        IconButton(
+                            onClick = { showMenu = true },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .testTag("top_menu_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "Options menu",
+                                tint = Color.White
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                            modifier = Modifier.background(DarkSurfaceVariant)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("All Restaurants", color = TextPrimary) },
+                                leadingIcon = { Icon(Icons.Default.RestaurantMenu, contentDescription = null, tint = MichelinRed) },
+                                onClick = {
+                                    viewModel.setSpecialMode(SpecialListMode.ALL)
+                                    showMenu = false
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("My Favourites", color = TextPrimary) },
+                                leadingIcon = { Icon(Icons.Default.Favorite, contentDescription = null, tint = MichelinRed) },
+                                onClick = {
+                                    viewModel.setSpecialMode(SpecialListMode.FAVORITES_ONLY)
+                                    showMenu = false
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("Visited Places", color = TextPrimary) },
+                                leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = GreenStarColor) },
+                                onClick = {
+                                    viewModel.setSpecialMode(SpecialListMode.VISITED_ONLY)
+                                    showMenu = false
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("Backup Favourites/Visited (JSON)", color = TextPrimary) },
+                                leadingIcon = { Icon(Icons.Default.Save, contentDescription = null, tint = MichelinGold) },
+                                onClick = {
+                                    viewModel.showBackupDialog(true)
+                                    showMenu = false
+                                }
+                            )
+                        }
                     }
-
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false },
-                        modifier = Modifier.background(DarkSurfaceVariant)
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("All Restaurants", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Default.RestaurantMenu, contentDescription = null, tint = MichelinRed) },
-                            onClick = {
-                                viewModel.setSpecialMode(SpecialListMode.ALL)
-                                showMenu = false
-                            }
-                        )
-
-                        DropdownMenuItem(
-                            text = { Text("My Favourites", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Default.Favorite, contentDescription = null, tint = MichelinRed) },
-                            onClick = {
-                                viewModel.setSpecialMode(SpecialListMode.FAVORITES_ONLY)
-                                showMenu = false
-                            }
-                        )
-
-                        DropdownMenuItem(
-                            text = { Text("Visited Places", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = GreenStarColor) },
-                            onClick = {
-                                viewModel.setSpecialMode(SpecialListMode.VISITED_ONLY)
-                                showMenu = false
-                            }
-                        )
-
-                        DropdownMenuItem(
-                            text = { Text("Backup Favourites/Visited (JSON)", color = TextPrimary) },
-                            leadingIcon = { Icon(Icons.Default.Save, contentDescription = null, tint = MichelinGold) },
-                            onClick = {
-                                viewModel.showBackupDialog(true)
-                                showMenu = false
-                            }
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DarkBackground,
-                    titleContentColor = TextPrimary
-                )
-            )
+                }
+            }
         },
         bottomBar = {
-            // Presentation in Two Tabs: List and Map
-            NavigationBar(
-                containerColor = DarkSurface,
-                contentColor = TextPrimary
+            // Presentation in Two Tabs: List and Map (compact height)
+            Surface(
+                color = DarkSurface,
+                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF2C2C2C)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
             ) {
-                NavigationBarItem(
-                    selected = uiState.selectedTabIndex == 0,
-                    onClick = { viewModel.selectTab(0) },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.FormatListBulleted,
-                            contentDescription = "List View"
-                        )
-                    },
-                    label = { Text("List", fontWeight = FontWeight.SemiBold) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MichelinRed,
-                        selectedTextColor = MichelinRed,
-                        indicatorColor = Color(0xFF3F0B09),
-                        unselectedIconColor = TextSecondary,
-                        unselectedTextColor = TextSecondary
-                    ),
-                    modifier = Modifier.testTag("tab_list")
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Tab 0: List
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize()
+                            .clickable { viewModel.selectTab(0) }
+                            .testTag("tab_list"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (uiState.selectedTabIndex == 0) Color(0xFF3F0B09) else Color.Transparent)
+                                .padding(horizontal = 20.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FormatListBulleted,
+                                contentDescription = "List View",
+                                tint = if (uiState.selectedTabIndex == 0) MichelinRed else TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "List",
+                                color = if (uiState.selectedTabIndex == 0) MichelinRed else TextSecondary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
 
-                NavigationBarItem(
-                    selected = uiState.selectedTabIndex == 1,
-                    onClick = { viewModel.selectTab(1) },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Default.Map,
-                            contentDescription = "Map View"
-                        )
-                    },
-                    label = { Text("Map", fontWeight = FontWeight.SemiBold) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MichelinRed,
-                        selectedTextColor = MichelinRed,
-                        indicatorColor = Color(0xFF3F0B09),
-                        unselectedIconColor = TextSecondary,
-                        unselectedTextColor = TextSecondary
-                    ),
-                    modifier = Modifier.testTag("tab_map")
-                )
+                    // Tab 1: Map
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize()
+                            .clickable { viewModel.selectTab(1) }
+                            .testTag("tab_map"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (uiState.selectedTabIndex == 1) Color(0xFF3F0B09) else Color.Transparent)
+                                .padding(horizontal = 20.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Map,
+                                contentDescription = "Map View",
+                                tint = if (uiState.selectedTabIndex == 1) MichelinRed else TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Map",
+                                color = if (uiState.selectedTabIndex == 1) MichelinRed else TextSecondary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
             }
         }
     ) { innerPadding ->
@@ -364,7 +417,7 @@ fun MainScreen(
 
             // Cuisine dropdown filter
             CuisineDropdownFilter(
-                availableCuisines = availableCuisines,
+                availableCuisines = uiState.availableCuisines,
                 selectedCuisine = uiState.selectedCuisine,
                 onCuisineSelected = { viewModel.selectCuisine(it) }
             )

@@ -201,32 +201,34 @@ fun RestaurantCard(
                 }
             }
 
-            // Info Body
+            // Info Body (compact text lines)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(14.dp)
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
                 Text(
                     text = restaurant.name,
                     color = TextPrimary,
-                    fontSize = 18.sp,
+                    fontSize = 17.sp,
+                    lineHeight = 20.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 // Cuisine & Price
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
                         text = restaurant.cuisine.ifBlank { "Fine Dining" },
                         color = MichelinRed,
-                        fontSize = 13.sp,
+                        fontSize = 12.5.sp,
+                        lineHeight = 15.sp,
                         fontWeight = FontWeight.Medium
                     )
 
@@ -234,18 +236,18 @@ fun RestaurantCard(
                         Text(
                             text = "•",
                             color = TextSecondary,
-                            fontSize = 12.sp
+                            fontSize = 11.sp
                         )
                         Text(
                             text = restaurant.price,
                             color = TextSecondary,
-                            fontSize = 13.sp,
+                            fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 // Address / Location
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -253,13 +255,13 @@ fun RestaurantCard(
                         imageVector = Icons.Default.LocationOn,
                         contentDescription = null,
                         tint = TextSecondary,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(13.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
                     Text(
                         text = if (restaurant.address.isNotBlank()) restaurant.address else restaurant.location,
                         color = TextSecondary,
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )

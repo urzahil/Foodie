@@ -6,8 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
@@ -28,8 +31,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,8 +41,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -139,7 +143,7 @@ fun CuisineDropdownFilter(
             }
         }
 
-        // Dropdown Menu
+        // Dropdown Menu (compact list)
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = {
@@ -148,74 +152,97 @@ fun CuisineDropdownFilter(
             },
             modifier = Modifier
                 .widthIn(min = 280.dp, max = 360.dp)
-                .heightIn(max = 380.dp)
+                .heightIn(max = 350.dp)
                 .background(DarkSurfaceVariant)
                 .border(1.dp, Color(0xFF444444), RoundedCornerShape(12.dp))
                 .testTag("cuisine_dropdown_menu")
         ) {
-            // Optional Search Bar inside dropdown for quick filter
+            // Search Bar inside dropdown with centered text
             if (availableCuisines.size > 8) {
-                Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-                    OutlinedTextField(
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    BasicTextField(
                         value = cuisineSearchQuery,
                         onValueChange = { cuisineSearchQuery = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .height(34.dp)
                             .testTag("cuisine_search_field"),
-                        placeholder = {
-                            Text(
-                                text = "Search cuisine...",
-                                color = TextSecondary,
-                                fontSize = 12.sp
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                tint = TextSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        },
-                        trailingIcon = {
-                            if (cuisineSearchQuery.isNotEmpty()) {
-                                IconButton(
-                                    onClick = { cuisineSearchQuery = "" },
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Clear,
-                                        contentDescription = "Clear search",
-                                        tint = TextSecondary,
-                                        modifier = Modifier.size(14.dp)
+                        textStyle = TextStyle(
+                            color = TextPrimary,
+                            fontSize = 12.5.sp,
+                            textAlign = TextAlign.Center
+                        ),
+                        singleLine = true,
+                        cursorBrush = SolidColor(MichelinGold),
+                        decorationBox = { innerTextField ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(DarkSurface)
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (cuisineSearchQuery.isNotEmpty()) MichelinGold else Color(0xFF444444),
+                                        shape = RoundedCornerShape(8.dp)
                                     )
+                                    .padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (cuisineSearchQuery.isEmpty()) {
+                                        Text(
+                                            text = "Search cuisine...",
+                                            color = TextSecondary,
+                                            fontSize = 12.sp,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                                if (cuisineSearchQuery.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = { cuisineSearchQuery = "" },
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Clear,
+                                            contentDescription = "Clear search",
+                                            tint = TextSecondary,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                } else {
+                                    Spacer(modifier = Modifier.size(15.dp))
                                 }
                             }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(8.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = DarkSurface,
-                            unfocusedContainerColor = DarkSurface,
-                            focusedBorderColor = MichelinGold,
-                            unfocusedBorderColor = Color(0xFF555555),
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary
-                        )
+                        }
                     )
                 }
                 HorizontalDivider(color = Color(0xFF383838), thickness = 0.5.dp)
             }
 
-            // "All Cuisines" Reset Option
+            // "All Cuisines" Reset Option (compact)
             DropdownMenuItem(
                 text = {
                     Text(
                         text = "All Cuisines",
                         color = if (selectedCuisine == null) MichelinGold else TextPrimary,
                         fontWeight = if (selectedCuisine == null) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 13.sp
+                        fontSize = 12.5.sp
                     )
                 },
                 trailingIcon = {
@@ -224,7 +251,7 @@ fun CuisineDropdownFilter(
                             imageVector = Icons.Default.Check,
                             contentDescription = "Selected",
                             tint = MichelinGold,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 },
@@ -233,17 +260,21 @@ fun CuisineDropdownFilter(
                     expanded = false
                     cuisineSearchQuery = ""
                 },
-                modifier = Modifier.testTag("cuisine_option_all")
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(32.dp)
+                    .testTag("cuisine_option_all")
             )
 
             HorizontalDivider(color = Color(0xFF383838), thickness = 0.5.dp)
 
-            // Filtered Cuisines List
+            // Filtered Cuisines List (compact)
             if (filteredCuisines.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -261,7 +292,7 @@ fun CuisineDropdownFilter(
                                 text = cuisine,
                                 color = if (isSelected) MichelinGold else TextPrimary,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 13.sp,
+                                fontSize = 12.5.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -272,7 +303,7 @@ fun CuisineDropdownFilter(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = "Selected",
                                     tint = MichelinGold,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
                             }
                         },
@@ -281,7 +312,11 @@ fun CuisineDropdownFilter(
                             expanded = false
                             cuisineSearchQuery = ""
                         },
-                        modifier = Modifier.testTag("cuisine_option_$cuisine")
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(32.dp)
+                            .testTag("cuisine_option_$cuisine")
                     )
                 }
             }

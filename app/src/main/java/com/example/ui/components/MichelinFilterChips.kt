@@ -40,7 +40,7 @@ fun MichelinFilterChips(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -148,10 +148,10 @@ private fun MichelinFilterItem(
 
     Box(
         modifier = modifier
-            .height(34.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .height(28.dp)
+            .clip(RoundedCornerShape(8.dp))
             .background(containerBg)
-            .border(1.dp, borderCol, RoundedCornerShape(10.dp))
+            .border(1.dp, borderCol, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 4.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center

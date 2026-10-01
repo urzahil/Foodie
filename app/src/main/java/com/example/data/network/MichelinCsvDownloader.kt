@@ -89,7 +89,8 @@ class MichelinCsvDownloader(
                         localImagePath = it.localImagePath,
                         imageUrl = it.imageUrl,
                         imageLastDownloaded = it.imageLastDownloaded,
-                        openingHours = it.openingHours
+                        openingHours = it.openingHours,
+                        openingHoursLastFetched = it.openingHoursLastFetched
                     )
                 }
             )
@@ -160,6 +161,7 @@ class MichelinCsvDownloader(
                                         facilitiesAndServices = facilities,
                                         description = description,
                                         openingHours = previous?.openingHours.orEmpty(),
+                                        openingHoursLastFetched = previous?.openingHoursLastFetched ?: 0L,
                                         localImagePath = previous?.localImagePath,
                                         imageUrl = previous?.imageUrl,
                                         imageLastDownloaded = previous?.imageLastDownloaded ?: 0L,
@@ -216,7 +218,8 @@ class MichelinCsvDownloader(
         val localImagePath: String?,
         val imageUrl: String?,
         val imageLastDownloaded: Long,
-        val openingHours: String
+        val openingHours: String,
+        val openingHoursLastFetched: Long
     )
 
     private inline fun parseCsv(reader: BufferedReader, onRow: (List<String>) -> Unit) {

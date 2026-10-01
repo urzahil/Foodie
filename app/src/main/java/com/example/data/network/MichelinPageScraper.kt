@@ -196,12 +196,21 @@ class MichelinPageScraper(
 
     private fun parseOpeningHours(html: String): String? {
         try {
+            // Michelin's day cards can contain a variable number of nested divs.
+            // Matching the card by its final two closing divs is fragile and can
+            // truncate/skip cards such as Sunday when Michelin adds extra markup.
+            // Instead, capture each card up to the next card-borderline and then
+            // independently extract its title and all card--content blocks.
             val dayCardPattern = Pattern.compile(
-                """<div[^>]*class=["'][^"']*card-borderline[^"']*["'][^>]*>.*?<div[^>]*class=["'][^"']*card--title[^"']*["'][^>]*>\s*([^<]+?)\s*</div>(.*?)</div>\s*</div>""",
+                """<div[^>]*class=["'][^"']*card-borderline[^"']*["'][^>]*>(.*?)(?=<div[^>]*class=["'][^"']*card-borderline[^"']*["'][^>]*>|$)""",
+                Pattern.CASE_INSENSITIVE or Pattern.DOTALL
+            )
+            val titlePattern = Pattern.compile(
+                """<div[^>]*class=["'][^"']*card--title[^"']*["'][^>]*>(.*?)</div>""",
                 Pattern.CASE_INSENSITIVE or Pattern.DOTALL
             )
             val contentPattern = Pattern.compile(
-                """<div[^>]*class=["'][^"']*card--content[^"']*["'][^>]*>\s*([^<]+?)\s*</div>""",
+                """<div[^>]*class=["'][^"']*card--content[^"']*["'][^>]*>(.*?)</div>""",
                 Pattern.CASE_INSENSITIVE or Pattern.DOTALL
             )
 
@@ -209,9 +218,13 @@ class MichelinPageScraper(
             val cards = dayCardPattern.matcher(html)
 
             while (cards.find()) {
-                val day = normalizeDay(cards.group(1)) ?: continue
+                val card = cards.group(1)
+                val titleMatcher = titlePattern.matcher(card)
+                if (!titleMatcher.find()) continue
+
+                val day = normalizeDay(cleanHtmlText(titleMatcher.group(1))) ?: continue
                 val periods = mutableListOf<String>()
-                val periodMatcher = contentPattern.matcher(cards.group(2))
+                val periodMatcher = contentPattern.matcher(card)
 
                 while (periodMatcher.find()) {
                     val period = cleanHtmlText(periodMatcher.group(1))

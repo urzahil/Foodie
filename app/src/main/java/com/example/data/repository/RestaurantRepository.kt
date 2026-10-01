@@ -62,29 +62,6 @@ class RestaurantRepository(
         return result
     }
 
-    suspend fun refreshExpiredImagesOnStartup() = withContext(Dispatchers.IO) {
-        try {
-            val all = dao.getAllDirect()
-            val expired = all.filter { isImageExpired(it) }
-            if (expired.isEmpty()) return@withContext
-
-            val sorted = expired.sortedWith(
-                compareByDescending<RestaurantEntity> { it.isFavorite }
-                    .thenByDescending { it.isVisited }
-            )
-
-            for (restaurant in sorted) {
-                try {
-                    scraper.fetchAndStoreDetails(restaurant)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Startup image refresh failed for ${restaurant.name}: ${e.message}")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error refreshing images on startup", e)
-        }
-    }
-
     private suspend fun loadCityLocations() = withContext(Dispatchers.IO) {
         val all = dao.getAllDirect()
         val byCity = all.groupBy { it.location }.filterKeys { it.isNotBlank() }

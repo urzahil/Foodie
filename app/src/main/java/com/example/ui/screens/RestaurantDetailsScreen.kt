@@ -390,7 +390,7 @@ fun RestaurantDetailsScreen(
 
                         Text(
                             text = restaurant.openingHours.ifBlank {
-                                "Tuesday – Saturday: 18:30 – 22:30\nSunday & Monday: Closed\n(Reservations recommended)"
+                                "Opening hours unavailable"
                             },
                             color = Color(0xFFE0E0E0),
                             fontSize = 13.sp,

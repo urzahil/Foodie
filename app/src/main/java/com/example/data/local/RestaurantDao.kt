@@ -44,17 +44,18 @@ interface RestaurantDao {
         UPDATE restaurants 
         SET localImagePath = :localPath, 
             imageUrl = :imageUrl, 
-            imageLastDownloaded = :timestamp, 
-            openingHours = CASE WHEN :openingHours IS NOT NULL AND :openingHours != '' THEN :openingHours ELSE openingHours END 
+            imageLastDownloaded = :timestamp
         WHERE id = :id
     """)
     suspend fun updateImageData(
         id: Long,
         localPath: String?,
         imageUrl: String?,
-        timestamp: Long,
-        openingHours: String?
+        timestamp: Long
     )
+
+    @Query("UPDATE restaurants SET openingHours = :hours, openingHoursLastFetched = :timestamp WHERE id = :id")
+    suspend fun updateOpeningHours(id: Long, hours: String, timestamp: Long)
 
     @Query("SELECT * FROM restaurants WHERE isFavorite = 1 ORDER BY favoriteTimestamp DESC")
     fun getFavorites(): Flow<List<RestaurantEntity>>

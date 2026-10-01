@@ -83,6 +83,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
     var lastHandledRecenterTrigger: Long = 0L
 
     private var autocompleteJob: Job? = null
+    private var detailsJob: Job? = null
     private val downloadingIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
 
     init {
@@ -388,44 +389,35 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
 
     fun openRestaurantDetails(restaurant: RestaurantEntity) {
         _uiState.value = _uiState.value.copy(selectedRestaurantForDetails = restaurant)
-        // Trigger background scrape for fresh opening hours and downloaded image if needed
-        viewModelScope.launch {
-            val updated = repository.fetchRestaurantDetails(restaurant)
-            if (_uiState.value.selectedRestaurantForDetails?.id == restaurant.id) {
-                _uiState.value = _uiState.value.copy(selectedRestaurantForDetails = updated)
+        detailsJob?.cancel()
+        detailsJob = viewModelScope.launch {
+            // Room is the source of truth for hours, images, and bookmark changes.
+            launch {
+                repository.getRestaurantById(restaurant.id).collect { updated ->
+                    if (_uiState.value.selectedRestaurantForDetails?.id == restaurant.id) {
+                        _uiState.value = _uiState.value.copy(selectedRestaurantForDetails = updated)
+                    }
+                }
             }
+            launch { repository.refreshOpeningHoursOnDetailsView(restaurant.id) }
+            ensureRestaurantImageDownloaded(restaurant)
         }
     }
 
     fun closeRestaurantDetails() {
+        detailsJob?.cancel()
         _uiState.value = _uiState.value.copy(selectedRestaurantForDetails = null)
     }
 
     fun toggleFavorite(restaurant: RestaurantEntity) {
         viewModelScope.launch {
             repository.toggleFavorite(restaurant)
-            // If details is currently open for this restaurant, update it
-            if (_uiState.value.selectedRestaurantForDetails?.id == restaurant.id) {
-                _uiState.value = _uiState.value.copy(
-                    selectedRestaurantForDetails = restaurant.copy(
-                        isFavorite = !restaurant.isFavorite
-                    )
-                )
-            }
         }
     }
 
     fun toggleVisited(restaurant: RestaurantEntity, notes: String = "") {
         viewModelScope.launch {
             repository.toggleVisited(restaurant, notes)
-            if (_uiState.value.selectedRestaurantForDetails?.id == restaurant.id) {
-                _uiState.value = _uiState.value.copy(
-                    selectedRestaurantForDetails = restaurant.copy(
-                        isVisited = !restaurant.isVisited,
-                        visitedNotes = notes
-                    )
-                )
-            }
         }
     }
 

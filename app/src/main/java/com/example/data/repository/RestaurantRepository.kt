@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.data.local.RestaurantDao
 import com.example.data.local.RestaurantEntity
 import com.example.data.network.MichelinCsvDownloader
+import com.example.data.network.MichelinOpeningHours
 import com.example.data.network.MichelinPageScraper
 import com.example.data.network.SyncState
 import com.example.location.LocationHelper
@@ -35,6 +36,7 @@ class RestaurantRepository(
 
     private val downloader = MichelinCsvDownloader(context, dao)
     private val scraper = MichelinPageScraper(context, dao)
+    private val openingHours = MichelinOpeningHours(dao)
 
     val syncState: StateFlow<SyncState> = downloader.syncState
 
@@ -164,6 +166,10 @@ class RestaurantRepository(
 
     fun isImageExpired(restaurant: RestaurantEntity): Boolean {
         return scraper.isImageExpired(restaurant)
+    }
+
+    suspend fun refreshOpeningHoursOnDetailsView(id: Long) {
+        openingHours.refreshIfNeeded(id)
     }
 
     suspend fun fetchRestaurantDetails(restaurant: RestaurantEntity): RestaurantEntity {

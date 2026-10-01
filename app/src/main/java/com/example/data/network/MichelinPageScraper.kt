@@ -51,7 +51,10 @@ class MichelinPageScraper(
 
     suspend fun fetchAndStoreDetails(restaurant: RestaurantEntity): RestaurantEntity =
         withContext(Dispatchers.IO) {
-            if (!isImageExpired(restaurant) && restaurant.openingHours.isNotEmpty()) {
+            val imageExpired = isImageExpired(restaurant)
+            val hoursExpired = isOpeningHoursExpired(restaurant)
+
+            if (!imageExpired && !hoursExpired) {
                 return@withContext restaurant
             }
 
@@ -59,7 +62,6 @@ class MichelinPageScraper(
             var extractedHours: String? = null
 
             if (restaurant.url.isNotBlank() && restaurant.url.startsWith("http")) {
-                // 1. First attempt: Direct fetch of restaurant page
                 try {
                     val request = Request.Builder()
                         .url(restaurant.url)
@@ -71,57 +73,69 @@ class MichelinPageScraper(
                         .header("Accept-Language", "en-US,en;q=0.9")
                         .build()
 
-                    val response = client.newCall(request).execute()
-                    if (response.isSuccessful) {
-                        val html = response.body?.string().orEmpty()
+                    client.newCall(request).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val html = response.body?.string().orEmpty()
 
-                        // Extract from first <img> with prod-pics.guide.michelin.com
-                        val matcher = PROD_PICS_PATTERN.matcher(html)
-                        if (matcher.find()) {
-                            val hash = matcher.group(1)
-                            scrapedImageUrl = "https://prod-pics.guide.michelin.com/api/public/content/$hash.jpg"
-                        }
+                            if (imageExpired) {
+                                val matcher = PROD_PICS_PATTERN.matcher(html)
+                                if (matcher.find()) {
+                                    val hash = matcher.group(1)
+                                    scrapedImageUrl = "https://prod-pics.guide.michelin.com/api/public/content/$hash.jpg"
+                                }
 
-                        // Also check specifically for ci-src / data-src
-                        if (scrapedImageUrl.isNullOrBlank()) {
-                            val ciSrcPattern = Pattern.compile(
-                                """<img[^>]+(?:ci-src|data-src|src)=["']([^"']+)["']""",
-                                Pattern.CASE_INSENSITIVE
-                            ).matcher(html)
-                            while (ciSrcPattern.find()) {
-                                val urlCandidate = ciSrcPattern.group(1).replace("&amp;", "&")
-                                if (urlCandidate.contains("prod-pics.guide.michelin.com")) {
-                                    val m = PROD_PICS_PATTERN.matcher(urlCandidate)
-                                    if (m.find()) {
-                                        val hash = m.group(1)
-                                        scrapedImageUrl = "https://prod-pics.guide.michelin.com/api/public/content/$hash.jpg"
-                                        break
+                                if (scrapedImageUrl.isNullOrBlank()) {
+                                    val ciSrcPattern = Pattern.compile(
+                                        """<img[^>]+(?:ci-src|data-src|src)=["']([^"']+)["']""",
+                                        Pattern.CASE_INSENSITIVE
+                                    ).matcher(html)
+                                    while (ciSrcPattern.find()) {
+                                        val urlCandidate = ciSrcPattern.group(1).replace("&amp;", "&")
+                                        if (urlCandidate.contains("prod-pics.guide.michelin.com")) {
+                                            val m = PROD_PICS_PATTERN.matcher(urlCandidate)
+                                            if (m.find()) {
+                                                val hash = m.group(1)
+                                                scrapedImageUrl = "https://prod-pics.guide.michelin.com/api/public/content/$hash.jpg"
+                                                break
+                                            }
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        extractedHours = parseOpeningHours(html)
+                            if (hoursExpired) {
+                                extractedHours = parseOpeningHours(html)
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Direct scraping failed for ${restaurant.name}: ${e.message}")
                 }
 
-                // 2. Second attempt: Reader proxy if direct fetch did not yield the image
-                if (scrapedImageUrl.isNullOrBlank()) {
+                if ((imageExpired && scrapedImageUrl.isNullOrBlank()) ||
+                    (hoursExpired && extractedHours.isNullOrBlank())) {
                     try {
                         val proxyUrl = "https://r.jina.ai/${restaurant.url}"
                         val proxyReq = Request.Builder()
                             .url(proxyUrl)
                             .header("User-Agent", "Mozilla/5.0")
                             .build()
-                        val proxyResp = client.newCall(proxyReq).execute()
-                        if (proxyResp.isSuccessful) {
-                            val content = proxyResp.body?.string().orEmpty()
-                            val matcher = PROD_PICS_PATTERN.matcher(content)
-                            if (matcher.find()) {
-                                val hash = matcher.group(1)
-                                scrapedImageUrl = "https://prod-pics.guide.michelin.com/api/public/content/$hash.jpg"
+
+                        client.newCall(proxyReq).execute().use { proxyResp ->
+                            if (proxyResp.isSuccessful) {
+                                val content = proxyResp.body?.string().orEmpty()
+
+                                if (imageExpired && scrapedImageUrl.isNullOrBlank()) {
+                                    val matcher = PROD_PICS_PATTERN.matcher(content)
+                                    if (matcher.find()) {
+                                        val hash = matcher.group(1)
+                                        scrapedImageUrl = "https://prod-pics.guide.michelin.com/api/public/content/$hash.jpg"
+                                    }
+                                }
+
+                                if (hoursExpired && extractedHours.isNullOrBlank()) {
+                                    extractedHours = parseOpeningHours(content)
+                                }
                             }
                         }
                     } catch (e: Exception) {
@@ -130,66 +144,126 @@ class MichelinPageScraper(
                 }
             }
 
-            // Determine final image URL: strictly official Michelin prod-pics images, no placeholders
             val finalImageUrl = when {
+                !imageExpired -> restaurant.imageUrl
                 !scrapedImageUrl.isNullOrBlank() -> scrapedImageUrl
                 !restaurant.imageUrl.isNullOrBlank() && !restaurant.imageUrl.contains("unsplash.com") -> restaurant.imageUrl
                 else -> null
             }
 
-            // Determine opening hours fallback if not parsed
-            val finalHours = when {
-                !extractedHours.isNullOrBlank() -> extractedHours
-                restaurant.openingHours.isNotBlank() -> restaurant.openingHours
-                else -> generateStandardOpeningHours(restaurant)
-            }
+            val finalHours = extractedHours?.takeIf { it.isNotBlank() }
+            val hoursFetched = !finalHours.isNullOrBlank()
 
-            // Download and save image locally
-            var localPath: String? = null
-            if (!finalImageUrl.isNullOrBlank()) {
+            var localPath: String? = restaurant.localImagePath
+            var imageDownloaded = false
+            if (imageExpired && !finalImageUrl.isNullOrBlank()) {
                 try {
                     localPath = downloadImageToFile(restaurant.id, finalImageUrl)
+                    imageDownloaded = true
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed downloading image for ${restaurant.name}: ${e.message}")
                 }
             }
 
-            val now = System.currentTimeMillis()
+            val timestamp = System.currentTimeMillis()
+            val storedImageTimestamp = if (imageDownloaded) timestamp else restaurant.imageLastDownloaded
+            val storedHoursTimestamp = if (hoursFetched) timestamp else restaurant.openingHoursLastFetched
+            val storedHours = finalHours ?: restaurant.openingHours
+
             restaurantDao.updateImageData(
                 id = restaurant.id,
-                localPath = localPath ?: restaurant.localImagePath,
-                imageUrl = finalImageUrl ?: restaurant.imageUrl,
-                timestamp = now,
-                openingHours = finalHours
+                localPath = localPath,
+                imageUrl = finalImageUrl,
+                timestamp = timestamp,
+                imageDownloaded = imageDownloaded,
+                openingHours = storedHours,
+                hoursFetched = hoursFetched
             )
 
             return@withContext restaurant.copy(
-                localImagePath = localPath ?: restaurant.localImagePath,
-                imageUrl = finalImageUrl ?: restaurant.imageUrl,
-                imageLastDownloaded = now,
-                openingHours = finalHours
+                localImagePath = localPath,
+                imageUrl = finalImageUrl,
+                imageLastDownloaded = storedImageTimestamp,
+                openingHours = storedHours,
+                openingHoursLastFetched = storedHoursTimestamp
             )
         }
 
+    private fun isOpeningHoursExpired(restaurant: RestaurantEntity): Boolean {
+        if (restaurant.openingHoursLastFetched <= 0L) return true
+        return System.currentTimeMillis() - restaurant.openingHoursLastFetched > ONE_MONTH_MS
+    }
+
     private fun parseOpeningHours(html: String): String? {
         try {
-            // Check for JSON-LD openingHours
-            val ldMatcher = Pattern.compile(
-                """"openingHours":\s*(\[[^\]]+\]|"[^"]+")"""
-            ).matcher(html)
-            if (ldMatcher.find()) {
-                val raw = ldMatcher.group(1)
-                return raw.replace("\"", "").replace("[", "").replace("]", "").replace(",", "\n").trim()
+            val dayCardPattern = Pattern.compile(
+                """<div[^>]*class=["'][^"']*card-borderline[^"']*["'][^>]*>.*?<div[^>]*class=["'][^"']*card--title[^"']*["'][^>]*>\s*([^<]+?)\s*</div>(.*?)</div>\s*</div>""",
+                Pattern.CASE_INSENSITIVE or Pattern.DOTALL
+            )
+            val contentPattern = Pattern.compile(
+                """<div[^>]*class=["'][^"']*card--content[^"']*["'][^>]*>\s*([^<]+?)\s*</div>""",
+                Pattern.CASE_INSENSITIVE or Pattern.DOTALL
+            )
+
+            val result = linkedMapOf<String, MutableList<String>>()
+            val cards = dayCardPattern.matcher(html)
+
+            while (cards.find()) {
+                val day = normalizeDay(cards.group(1)) ?: continue
+                val periods = mutableListOf<String>()
+                val periodMatcher = contentPattern.matcher(cards.group(2))
+
+                while (periodMatcher.find()) {
+                    val period = cleanHtmlText(periodMatcher.group(1))
+                    if (period.isNotBlank()) periods += period
+                }
+
+                result.getOrPut(day) { mutableListOf() }.addAll(periods)
             }
 
-            // Check for data-sheet block or opening hours text
-            val hoursPattern = Pattern.compile(
-                """(?:Opening hours|Horaires d'ouverture)[^<]*<[^>]+>([^<]+)""",
+            if (result.isNotEmpty()) {
+                return result.entries.joinToString("\n") { entry ->
+                    val periods = entry.value
+                    entry.key + ": " + if (periods.isEmpty()) "Closed" else periods.joinToString(", ")
+                }
+            }
+
+            val ldMatcher = Pattern.compile(
+                """"openingHours":\s*(\[[^\]]+\]|"[^"]+")""",
                 Pattern.CASE_INSENSITIVE
             ).matcher(html)
-            if (hoursPattern.find()) {
-                val text = hoursPattern.group(1).trim()
-                if (text.isNotBlank() && text.length > 5) return text
+
+            if (ldMatcher.find()) {
+                return ldMatcher.group(1)
+                    .replace("\"", "")
+                    .replace("[", "")
+                    .replace("]", "")
+                    .replace(",", "\n")
+                    .trim()
+            }
+
+            val text = html
+                .replace(Regex("""<[^>]+>"""), "\n")
+                .replace("&nbsp;", " ")
+                .replace(Regex("""\s+"""), " ")
+                .trim()
+
+            val dayPattern = Pattern.compile(
+                """(?i)\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b\s+([^\n]{1,120}?)(?=\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b|$)"""
+            )
+            val fallback = dayPattern.matcher(text)
+            val fallbackResult = linkedMapOf<String, String>()
+
+            while (fallback.find()) {
+                val day = normalizeDay(fallback.group(1)) ?: continue
+                val value = cleanHtmlText(fallback.group(2))
+                if (value.isNotBlank()) fallbackResult[day] = value
+            }
+
+            if (fallbackResult.isNotEmpty()) {
+                return fallbackResult.entries.joinToString("\n") { entry ->
+                    entry.key + ": " + entry.value
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing opening hours", e)
@@ -197,20 +271,24 @@ class MichelinPageScraper(
         return null
     }
 
-    private fun generateStandardOpeningHours(restaurant: RestaurantEntity): String {
-        return when {
-            restaurant.award.contains("3 Stars", ignoreCase = true) ->
-                "Wednesday – Sunday:\nDinner: 18:30 – 22:30\nLunch (Sat & Sun): 12:00 – 14:30\nMonday & Tuesday: Closed\n(Reservations strictly required)"
-
-            restaurant.award.contains("2 Stars", ignoreCase = true) ->
-                "Tuesday – Saturday:\nDinner: 18:00 – 22:30\nLunch (Fri & Sat): 12:00 – 14:00\nSunday & Monday: Closed"
-
-            restaurant.award.contains("Bib Gourmand", ignoreCase = true) ->
-                "Daily:\nLunch: 11:30 – 15:00\nDinner: 17:30 – 22:00\nWalk-ins welcome"
-
-            else ->
-                "Tuesday – Sunday:\nLunch: 12:00 – 14:30\nDinner: 18:30 – 22:00\nMonday: Closed"
+    private fun normalizeDay(value: String): String? {
+        return when (value.trim().lowercase()) {
+            "monday", "mon", "mo" -> "Monday"
+            "tuesday", "tue", "tues", "tu" -> "Tuesday"
+            "wednesday", "wed", "we" -> "Wednesday"
+            "thursday", "thu", "thur", "thurs", "th" -> "Thursday"
+            "friday", "fri", "fr" -> "Friday"
+            "saturday", "sat", "sa" -> "Saturday"
+            "sunday", "sun", "su" -> "Sunday"
+            else -> null
         }
+    }
+
+    private fun cleanHtmlText(value: String): String {
+        return value
+            .replace(Regex("""\s+"""), " ")
+            .replace("&nbsp;", " ")
+            .trim()
     }
 
     private fun downloadImageToFile(restaurantId: Long, imageUrl: String): String {

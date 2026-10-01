@@ -4,7 +4,6 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -31,9 +30,6 @@ interface RestaurantDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(restaurant: RestaurantEntity): Long
 
-    @Update
-    suspend fun update(restaurant: RestaurantEntity)
-
     @Query("UPDATE restaurants SET isFavorite = :isFav, favoriteTimestamp = :timestamp WHERE id = :id")
     suspend fun updateFavorite(id: Long, isFav: Boolean, timestamp: Long)
 
@@ -41,11 +37,21 @@ interface RestaurantDao {
     suspend fun updateVisited(id: Long, isVisited: Boolean, timestamp: Long, notes: String)
 
     @Query("""
-        UPDATE restaurants 
-        SET localImagePath = :localPath, 
-            imageUrl = :imageUrl, 
-            imageLastDownloaded = :timestamp, 
-            openingHours = CASE WHEN :openingHours IS NOT NULL AND :openingHours != '' THEN :openingHours ELSE openingHours END 
+        UPDATE restaurants
+        SET localImagePath = :localPath,
+            imageUrl = :imageUrl,
+            imageLastDownloaded = CASE
+                WHEN :imageDownloaded = 1 THEN :timestamp
+                ELSE imageLastDownloaded
+            END,
+            openingHours = CASE
+                WHEN :openingHours IS NOT NULL AND :openingHours != '' THEN :openingHours
+                ELSE openingHours
+            END,
+            openingHoursLastFetched = CASE
+                WHEN :hoursFetched = 1 THEN :timestamp
+                ELSE openingHoursLastFetched
+            END
         WHERE id = :id
     """)
     suspend fun updateImageData(
@@ -53,7 +59,9 @@ interface RestaurantDao {
         localPath: String?,
         imageUrl: String?,
         timestamp: Long,
-        openingHours: String?
+        imageDownloaded: Boolean,
+        openingHours: String?,
+        hoursFetched: Boolean
     )
 
     @Query("SELECT * FROM restaurants WHERE isFavorite = 1 ORDER BY favoriteTimestamp DESC")

@@ -212,7 +212,8 @@ class MichelinPageScraper(
                 while (fallback.find()) {
                     val day = normalizeDay(fallback.group(1)) ?: continue
                     if (result.containsKey(day)) continue
-                    val next = dayPattern.find(text, fallback.end())?.range?.first ?: text.length
+                    val nextMatcher = dayPattern.matcher(text).apply { region(fallback.end(), text.length) }
+                    val next = if (nextMatcher.find()) nextMatcher.start() else text.length
                     val value = text.substring(fallback.end(), next).trim()
                     if (value.isNotBlank()) result[day] = mutableListOf(value)
                 }
@@ -229,7 +230,8 @@ class MichelinPageScraper(
             val fallbackResult = linkedMapOf<String, String>()
             while (fallback.find()) {
                 val day = normalizeDay(fallback.group(1)) ?: continue
-                val next = dayPattern.find(text, fallback.end())?.range?.first ?: text.length
+                val nextMatcher = dayPattern.matcher(text).apply { region(fallback.end(), text.length) }
+                val next = if (nextMatcher.find()) nextMatcher.start() else text.length
                 val value = text.substring(fallback.end(), next).trim()
                 if (value.isNotBlank()) fallbackResult[day] = value
             }

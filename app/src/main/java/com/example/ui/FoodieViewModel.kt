@@ -374,6 +374,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
                     mapRecenterTrigger = System.currentTimeMillis(),
                     listResetTrigger = _uiState.value.listResetTrigger + 1,
                     searchQuery = "",
+                    searchInputQuery = "",
                     autocompleteSuggestions = emptyList(),
                     isLocatingGps = false,
                     toastMessage = "Located: ${loc.name}"
@@ -399,6 +400,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
             mapRecenterTrigger = System.currentTimeMillis(),
             listResetTrigger = _uiState.value.listResetTrigger + 1,
             searchQuery = "",
+            searchInputQuery = "",
             autocompleteSuggestions = emptyList()
         )
         saveCurrentState()

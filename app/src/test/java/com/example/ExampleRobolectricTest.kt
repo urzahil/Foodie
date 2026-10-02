@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.location.LocationHelper
 import com.example.data.network.MichelinCsvDownloader
+import com.example.data.network.MichelinPageScraper
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -97,6 +98,43 @@ class ExampleRobolectricTest {
                 lng = 2.35
             )
         )
+    }
+
+    @Test
+    fun `opening hours parser stores only days and time ranges`() {
+        val html = """
+            <div class="card-borderline">
+              <span>Sunday</span>
+              <span>Opening hours</span>
+              <span>12:00 – 15:00</span>
+              <span>18:30 – 22:00</span>
+              <span>Reserve a table</span>
+              <span>Closed on public holidays</span>
+            </div>
+            <div class="card-borderline">
+              <span>Monday</span>
+              <span>11:30-14:00</span>
+              <span>17:30 to 21:30</span>
+              <span>Address: 123 Example Street</span>
+            </div>
+        """.trimIndent()
+
+        val parsed = MichelinPageScraper.parseOpeningHours(html)
+
+        assertEquals(
+            """Monday: 11:30–14:00, 17:30–21:30
+Tuesday: Closed
+Wednesday: Closed
+Thursday: Closed
+Friday: Closed
+Saturday: Closed
+Sunday: 12:00–15:00, 18:30–22:00""",
+            parsed
+        )
+        assertTrue(!parsed!!.contains("Opening hours"))
+        assertTrue(!parsed.contains("Reserve a table"))
+        assertTrue(!parsed.contains("Address"))
+        assertTrue(!parsed.contains("public holidays"))
     }
 
 }

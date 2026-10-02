@@ -134,14 +134,13 @@ fun MainScreen(
         }
     }
 
-    // Details observes the selected restaurant by ID, so favorite/visited/image/hour updates
-    // are always rendered from the Room source of truth.
-    if (selectedRestaurant != null) {
+    // Details observes the selected restaurant by ID, so Room remains the source of truth.
+    selectedRestaurant?.let { details ->
         RestaurantDetailsScreen(
-            restaurant = selectedRestaurant,
+            restaurant = details,
             onBack = { viewModel.closeRestaurantDetails() },
-            onToggleFavorite = { viewModel.toggleFavorite(selectedRestaurant) },
-            onToggleVisited = { notes -> viewModel.toggleVisited(selectedRestaurant, notes) }
+            onToggleFavorite = { viewModel.toggleFavorite(details) },
+            onToggleVisited = { notes -> viewModel.toggleVisited(details, notes) }
         )
         return
     }

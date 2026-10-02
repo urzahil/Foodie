@@ -2,7 +2,7 @@
 
 Foodie is an Android application for discovering and managing Michelin Guide restaurants. It maintains a local restaurant catalogue, supports location-aware search and filtering, provides list and Google Maps views, and stores favourites, visited state, and notes locally.
 
-> **Status:** active development. Current app version: **1.0**. Application ID: `com.aistudio.foodie.michelin`.
+> **Status:** active development. Current app version: **1.4**. Application ID: `com.aistudio.foodie.michelin`.
 
 ## Features
 

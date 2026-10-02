@@ -2,6 +2,8 @@ name: Build Foodie Release APK
 
 on:
   push:
+    branches:
+      - 'refactor/performance-data-integrity'
     tags:
       - 'v*'
   workflow_dispatch:

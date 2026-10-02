@@ -46,6 +46,7 @@ data class UiState(
     val searchQuery: String = "",
     val activeLocation: LocationTarget? = null,
     val mapRecenterTrigger: Long = 0L,
+    val listResetTrigger: Long = 0L,
     val selectedFilters: Set<MichelinAwardFilter> = emptySet(),
     val availableCuisines: List<String> = emptyList(),
     val selectedCuisine: String? = null,
@@ -262,7 +263,8 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
     )
 
     fun onSearchQueryChanged(query: String) {
-        _uiState.value = _uiState.value.copy(searchQuery = query)
+        _uiState.value = _uiState.value.copy(searchQuery = query,
+            listResetTrigger = _uiState.value.listResetTrigger + 1)
         autocompleteJob?.cancel()
 
         if (query.trim().length >= 2) {
@@ -291,7 +293,8 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         if (_uiState.value.searchQuery.isNotEmpty()) {
             _uiState.value = _uiState.value.copy(
                 searchQuery = "",
-                autocompleteSuggestions = emptyList()
+                autocompleteSuggestions = emptyList(),
+                listResetTrigger = _uiState.value.listResetTrigger + 1
             )
             saveCurrentState()
         }
@@ -311,6 +314,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(
             activeLocation = target,
             mapRecenterTrigger = System.currentTimeMillis(),
+            listResetTrigger = _uiState.value.listResetTrigger + 1,
             searchQuery = "",
             autocompleteSuggestions = emptyList(),
             isSearchingAutocomplete = false
@@ -330,6 +334,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
                 _uiState.value = _uiState.value.copy(
                     activeLocation = loc,
                     mapRecenterTrigger = System.currentTimeMillis(),
+                    listResetTrigger = _uiState.value.listResetTrigger + 1,
                     searchQuery = "",
                     autocompleteSuggestions = emptyList(),
                     isLocatingGps = false,
@@ -354,6 +359,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(
             activeLocation = target,
             mapRecenterTrigger = System.currentTimeMillis(),
+            listResetTrigger = _uiState.value.listResetTrigger + 1,
             searchQuery = "",
             autocompleteSuggestions = emptyList()
         )

@@ -68,6 +68,8 @@ import com.example.ui.theme.TextSecondary
 fun SearchBarWithNearMe(
     query: String,
     onQueryChanged: (String) -> Unit,
+    onSearchSubmitted: () -> Unit,
+    onSearchCancelled: () -> Unit,
     onSearchFieldClicked: () -> Unit,
     activeLocation: LocationTarget?,
     suggestions: List<AutocompleteSuggestion>,
@@ -116,9 +118,7 @@ fun SearchBarWithNearMe(
                         onSearch = {
                             focusManager.clearFocus()
                             keyboardController?.hide()
-                            if (suggestions.isNotEmpty()) {
-                                onSuggestionSelected(suggestions.first())
-                            }
+                            onSearchSubmitted()
                         }
                     ),
                     decorationBox = { innerTextField ->
@@ -159,7 +159,7 @@ fun SearchBarWithNearMe(
                             }
                             if (query.isNotEmpty()) {
                                 IconButton(
-                                    onClick = { onQueryChanged("") },
+                                    onClick = onSearchCancelled,
                                     modifier = Modifier.size(28.dp)
                                 ) {
                                     Icon(

@@ -66,6 +66,9 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL(
                     "ALTER TABLE restaurants ADD COLUMN catalogueLastSeen INTEGER NOT NULL DEFAULT 0"
                 )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_restaurants_latitude_longitude ON restaurants(latitude, longitude)"
+                )
             }
         }
 

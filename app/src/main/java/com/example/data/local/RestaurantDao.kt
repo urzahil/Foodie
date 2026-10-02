@@ -165,11 +165,13 @@ interface RestaurantDao {
         INSERT INTO restaurants (
             sourceKey, name, address, location, price, cuisine, longitude, latitude,
             phoneNumber, url, websiteUrl, award, greenStar, facilitiesAndServices,
-            description, catalogueLastSeen
+            description, openingHours, openingHoursLastFetched, imageLastDownloaded,
+            isFavorite, favoriteTimestamp, isVisited, visitedTimestamp, visitedNotes,
+            catalogueLastSeen
         ) VALUES (
             :sourceKey, :name, :address, :location, :price, :cuisine, :longitude, :latitude,
             :phoneNumber, :url, :websiteUrl, :award, :greenStar, :facilitiesAndServices,
-            :description, :syncToken
+            :description, '', 0, 0, 0, 0, 0, 0, '', :syncToken
         )
         ON CONFLICT(sourceKey) DO UPDATE SET
             name = excluded.name,

@@ -95,6 +95,30 @@ internal fun parseOpeningHours(html: String): String? {
     }
 
 
+        private fun htmlFragmentToText(value: String): String {
+        return value
+            .replace(Regex("(?i)<br\\s*/?>"), "\n")
+            .replace(Regex("(?i)</(div|li|p|tr|td|th|section|article)>"), "\n")
+            .replace(Regex("<[^>]+>"), " ")
+            .replace("&nbsp;", " ").replace("&amp;", "&").replace("&ndash;", "–").replace("&mdash;", "—")
+            .replace(Regex("[ \\t]+"), " ")
+            .replace(Regex("\\n[ \\t]+"), "\n")
+            .replace(Regex("[ \\t]+\\n"), "\n")
+            .trim()
+    }
+        private fun normalizeDay(value: String): String? {
+        return when (value.trim().lowercase()) {
+            "monday", "mon", "mo" -> "Monday"
+            "tuesday", "tue", "tues", "tu" -> "Tuesday"
+            "wednesday", "wed", "we" -> "Wednesday"
+            "thursday", "thu", "thur", "thurs", "th" -> "Thursday"
+            "friday", "fri", "fr" -> "Friday"
+            "saturday", "sat", "sa" -> "Saturday"
+            "sunday", "sun", "su" -> "Sunday"
+            else -> null
+        }
+    }
+
         val PROD_PICS_PATTERN = Pattern.compile(
             """https://prod-pics\.guide\.michelin\.com/api/public/content/([a-zA-Z0-9_-]+)\.(?:jpg|jpeg|png|webp)""",
             Pattern.CASE_INSENSITIVE
@@ -250,29 +274,6 @@ internal fun parseOpeningHours(html: String): String? {
     }
 
 
-    private fun htmlFragmentToText(value: String): String {
-        return value
-            .replace(Regex("(?i)<br\\s*/?>"), "\n")
-            .replace(Regex("(?i)</(div|li|p|tr|td|th|section|article)>"), "\n")
-            .replace(Regex("<[^>]+>"), " ")
-            .replace("&nbsp;", " ").replace("&amp;", "&").replace("&ndash;", "–").replace("&mdash;", "—")
-            .replace(Regex("[ \\t]+"), " ")
-            .replace(Regex("\\n[ \\t]+"), "\n")
-            .replace(Regex("[ \\t]+\\n"), "\n")
-            .trim()
-    }
-    private fun normalizeDay(value: String): String? {
-        return when (value.trim().lowercase()) {
-            "monday", "mon", "mo" -> "Monday"
-            "tuesday", "tue", "tues", "tu" -> "Tuesday"
-            "wednesday", "wed", "we" -> "Wednesday"
-            "thursday", "thu", "thur", "thurs", "th" -> "Thursday"
-            "friday", "fri", "fr" -> "Friday"
-            "saturday", "sat", "sa" -> "Saturday"
-            "sunday", "sun", "su" -> "Sunday"
-            else -> null
-        }
-    }
 
     private fun cleanHtmlText(value: String): String {
         return value

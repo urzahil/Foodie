@@ -184,10 +184,12 @@ class RestaurantRepository(
             val array = root.optJSONArray("restaurants") ?: return@withContext -1
             val all = dao.getAllDirect()
             val bySourceKey = all.associateBy { it.sourceKey }
-            val byUrl = all.filter { it.url.isNotBlank() }.associateBy { it.url }
-            val byNameLocation = all.associateBy {
+            val byUrl = all.filter { it.url.isNotBlank() }
+                .groupBy { it.url }
+                .mapValues { (_, matches) -> matches.singleOrNull() }
+            val byNameLocation = all.groupBy {
                 "${it.name.lowercase().trim()}|${it.location.lowercase().trim()}"
-            }
+            }.mapValues { (_, matches) -> matches.singleOrNull() }
 
             val states = ArrayList<ImportedUserState>(array.length())
             for (i in 0 until array.length()) {

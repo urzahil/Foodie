@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.RestaurantEntity
 import com.example.location.LocationTarget
 import com.example.ui.FoodieViewModel
@@ -72,11 +73,19 @@ fun RestaurantListTab(
     onSelectCity: (String, Double, Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
     // Preserve scroll position across tab switches and back navigation
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = viewModel.preservedListIndex,
         initialFirstVisibleItemScrollOffset = viewModel.preservedListOffset
     )
+
+    LaunchedEffect(uiState.listResetTrigger) {
+        listState.scrollToItem(0)
+        viewModel.preservedListIndex = 0
+        viewModel.preservedListOffset = 0
+    }
 
     LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
         viewModel.preservedListIndex = listState.firstVisibleItemIndex

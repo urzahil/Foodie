@@ -119,36 +119,6 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun ensureRestaurantImageDownloaded(restaurant: RestaurantEntity) {
-        if (repository.isImageExpired(restaurant) && downloadingIds.add(restaurant.id)) {
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    repository.fetchRestaurantDetails(restaurant)
-                } catch (e: Exception) {
-                    android.util.Log.w("FoodieViewModel", "Image download failed for ${restaurant.name}: ${e.message}")
-                } finally {
-                    downloadingIds.remove(restaurant.id)
-                }
-            }
-        }
-    }
-
-    fun onRestaurantsListed(restaurants: List<RestaurantEntity>) {
-        viewModelScope.launch(Dispatchers.IO) {
-            // Prioritize first 25 listed items
-            for (r in restaurants.take(25)) {
-                if (repository.isImageExpired(r) && downloadingIds.add(r.id)) {
-                    try {
-                        repository.fetchRestaurantDetails(r)
-                    } catch (_: Exception) {}
-                    finally {
-                        downloadingIds.remove(r.id)
-                    }
-                }
-            }
-        }
-    }
-
     private fun restoreLastState() {
         val lastQuery = prefs.getString("last_search_query", "") ?: ""
         val lastLocName = prefs.getString("last_loc_name", null)

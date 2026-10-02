@@ -72,6 +72,15 @@ secrets {
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
+// CI provides MAPS_API_KEY as an environment variable. Apply it after the
+// Secrets Gradle Plugin has finished configuring its default properties so the
+// CI value cannot be replaced by .env.example.
+gradle.projectsEvaluated {
+  System.getenv("MAPS_API_KEY")?.takeIf { it.isNotBlank() }?.let { mapsApiKey ->
+    android.defaultConfig.manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
+  }
+}
+
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {

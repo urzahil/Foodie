@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -485,15 +486,19 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun toggleFavorite(restaurant: RestaurantListItem) {
-        viewModelScope.launch {
-            repository.toggleFavorite(restaurant.id)
-        }
+        viewModelScope.launch { repository.toggleFavorite(restaurant.id) }
+    }
+
+    fun toggleFavorite(restaurant: RestaurantEntity) {
+        viewModelScope.launch { repository.toggleFavorite(restaurant.id) }
     }
 
     fun toggleVisited(restaurant: RestaurantListItem, notes: String = "") {
-        viewModelScope.launch {
-            repository.toggleVisited(restaurant.id, notes)
-        }
+        viewModelScope.launch { repository.toggleVisited(restaurant.id, notes) }
+    }
+
+    fun toggleVisited(restaurant: RestaurantEntity, notes: String = "") {
+        viewModelScope.launch { repository.toggleVisited(restaurant.id, notes) }
     }
 
     fun showBackupDialog(show: Boolean) {

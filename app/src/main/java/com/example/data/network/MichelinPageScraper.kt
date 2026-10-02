@@ -222,6 +222,21 @@ class MichelinPageScraper(
                     if (period.isNotBlank()) result.getOrPut(day) { mutableListOf() }.add(period)
                 }
             }
+            // If any day card was malformed or omitted, use the rendered text only to fill
+            // missing days. This prevents a partial card parse from suppressing Sunday.
+            val allDays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+            if (result.size < allDays.size) {
+                val text = htmlFragmentToText(html)
+                val fallback = dayPattern.matcher(text)
+                while (fallback.find()) {
+                    val day = normalizeDay(fallback.group(1)) ?: continue
+                    if (result.containsKey(day)) continue
+                    val next = dayPattern.find(text, fallback.end())?.range?.first ?: text.length
+                    val value = text.substring(fallback.end(), next).trim()
+                    if (value.isNotBlank()) result[day] = mutableListOf(value)
+                }
+            }
+
             if (result.isNotEmpty()) {
                 return result.entries.joinToString("\n") { (day, periods) ->
                     val unique = periods.distinct()

@@ -196,94 +196,65 @@ class MichelinPageScraper(
 
     private fun parseOpeningHours(html: String): String? {
         try {
-            // Michelin's day cards can contain a variable number of nested divs.
-            // Matching the card by its final two closing divs is fragile and can
-            // truncate/skip cards such as Sunday when Michelin adds extra markup.
-            // Instead, capture each card up to the next card-borderline and then
-            // independently extract its title and all card--content blocks.
-            val dayCardPattern = Pattern.compile(
-                """<div[^>]*class=["'][^"']*card-borderline[^"']*["'][^>]*>(.*?)(?=<div[^>]*class=["'][^"']*card-borderline[^"']*["'][^>]*>|$)""",
-                Pattern.CASE_INSENSITIVE or Pattern.DOTALL
-            )
-            val titlePattern = Pattern.compile(
-                """<div[^>]*class=["'][^"']*card--title[^"']*["'][^>]*>(.*?)</div>""",
-                Pattern.CASE_INSENSITIVE or Pattern.DOTALL
-            )
-            val contentPattern = Pattern.compile(
-                """<div[^>]*class=["'][^"']*card--content[^"']*["'][^>]*>(.*?)</div>""",
-                Pattern.CASE_INSENSITIVE or Pattern.DOTALL
-            )
-
             val result = linkedMapOf<String, MutableList<String>>()
-            val cards = dayCardPattern.matcher(html)
-
+            val cardPattern = Pattern.compile("<div[^>]*class=[\\\"'][^\\\"']*card-borderline[^\\\"']*[\\\"'][^>]*>(.*?)(?=<div[^>]*class=[\\\"'][^\\\"']*card-borderline[^\\\"']*[\\\"'][^>]*>|$)", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
+            val dayPattern = Pattern.compile("\\\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun)\\\\b", Pattern.CASE_INSENSITIVE)
+            val cards = cardPattern.matcher(html)
             while (cards.find()) {
-                val card = cards.group(1)
-                val titleMatcher = titlePattern.matcher(card)
-                if (!titleMatcher.find()) continue
-
-                val day = normalizeDay(cleanHtmlText(titleMatcher.group(1))) ?: continue
-                val periods = mutableListOf<String>()
-                val periodMatcher = contentPattern.matcher(card)
-
-                while (periodMatcher.find()) {
-                    val period = cleanHtmlText(periodMatcher.group(1))
-                    if (period.isNotBlank()) periods += period
-                }
-
+                val cardText = htmlFragmentToText(cards.group(1))
+                val dayMatcher = dayPattern.matcher(cardText)
+                if (!dayMatcher.find()) continue
+                val day = normalizeDay(dayMatcher.group(1)) ?: continue
+                val afterDay = cardText.substring(dayMatcher.end()).trim()
+                val periods = afterDay.split('\\n').map { it.trim() }.filter { it.isNotBlank() }
+                    .filterNot { it.equals("Opening hours", true) || it.equals("Hours", true) }
                 result.getOrPut(day) { mutableListOf() }.addAll(periods)
             }
-
-            if (result.isNotEmpty()) {
-                return result.entries.joinToString("\n") { entry ->
-                    val periods = entry.value
-                    entry.key + ": " + if (periods.isEmpty()) "Closed" else periods.joinToString(", ")
+            val ld = Pattern.compile("\\\"openingHours\\\"\\s*:\\s*(\\[[^\\]]+\\]|\\\"[^\\\"]+\\\")", Pattern.CASE_INSENSITIVE).matcher(html)
+            if (ld.find()) {
+                val raw = ld.group(1)
+                val values = Regex("\\\"([^\\\"]+)\\\"").findAll(raw).map { it.groupValues[1] }.toList()
+                for (value in values) {
+                    val m = dayPattern.matcher(value)
+                    if (!m.find()) continue
+                    val day = normalizeDay(m.group(1)) ?: continue
+                    val period = value.substring(m.end()).trim().trimStart(':', '-', '–')
+                    if (period.isNotBlank()) result.getOrPut(day) { mutableListOf() }.add(period)
                 }
             }
-
-            val ldMatcher = Pattern.compile(
-                """"openingHours":\s*(\[[^\]]+\]|"[^"]+")""",
-                Pattern.CASE_INSENSITIVE
-            ).matcher(html)
-
-            if (ldMatcher.find()) {
-                return ldMatcher.group(1)
-                    .replace("\"", "")
-                    .replace("[", "")
-                    .replace("]", "")
-                    .replace(",", "\n")
-                    .trim()
+            if (result.isNotEmpty()) {
+                return result.entries.joinToString("\\n") { (day, periods) ->
+                    val unique = periods.distinct()
+                    day + ": " + if (unique.isEmpty()) "Closed" else unique.joinToString(", ")
+                }
             }
-
-            val text = html
-                .replace(Regex("""<[^>]+>"""), "\n")
-                .replace("&nbsp;", " ")
-                .replace(Regex("""\s+"""), " ")
-                .trim()
-
-            val dayPattern = Pattern.compile(
-                """(?i)\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b\s+([^\n]{1,120}?)(?=\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b|$)"""
-            )
+            val text = htmlFragmentToText(html)
             val fallback = dayPattern.matcher(text)
             val fallbackResult = linkedMapOf<String, String>()
-
             while (fallback.find()) {
                 val day = normalizeDay(fallback.group(1)) ?: continue
-                val value = cleanHtmlText(fallback.group(2))
+                val next = dayPattern.find(text, fallback.end())?.range?.first ?: text.length
+                val value = text.substring(fallback.end(), next).trim()
                 if (value.isNotBlank()) fallbackResult[day] = value
             }
-
-            if (fallbackResult.isNotEmpty()) {
-                return fallbackResult.entries.joinToString("\n") { entry ->
-                    entry.key + ": " + entry.value
-                }
-            }
+            if (fallbackResult.isNotEmpty()) return fallbackResult.entries.joinToString("\\n") { it.key + ": " + it.value }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing opening hours", e)
         }
         return null
     }
 
+    private fun htmlFragmentToText(value: String): String {
+        return value
+            .replace(Regex("(?i)<br\\s*/?>"), "\\n")
+            .replace(Regex("(?i)</(div|li|p|tr|td|th|section|article)>"), "\\n")
+            .replace(Regex("<[^>]+>"), " ")
+            .replace("&nbsp;", " ").replace("&amp;", "&").replace("&ndash;", "–").replace("&mdash;", "—")
+            .replace(Regex("[ \\t]+"), " ")
+            .replace(Regex("\\n[ \\t]+"), "\\n")
+            .replace(Regex("[ \\t]+\\n"), "\\n")
+            .trim()
+    }
     private fun normalizeDay(value: String): String? {
         return when (value.trim().lowercase()) {
             "monday", "mon", "mo" -> "Monday"

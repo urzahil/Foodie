@@ -198,7 +198,7 @@ class MichelinPageScraper(
         try {
             val result = linkedMapOf<String, MutableList<String>>()
             val cardPattern = Pattern.compile("<div[^>]*class=[\\\"'][^\\\"']*card-borderline[^\\\"']*[\\\"'][^>]*>(.*?)(?=<div[^>]*class=[\\\"'][^\\\"']*card-borderline[^\\\"']*[\\\"'][^>]*>|$)", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
-            val dayPattern = Pattern.compile("\\\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun)\\\\b", Pattern.CASE_INSENSITIVE)
+            val dayPattern = Pattern.compile("\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun)\\b", Pattern.CASE_INSENSITIVE)
             val cards = cardPattern.matcher(html)
             while (cards.find()) {
                 val cardText = htmlFragmentToText(cards.group(1))

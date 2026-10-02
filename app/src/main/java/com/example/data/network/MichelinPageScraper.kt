@@ -21,6 +21,80 @@ class MichelinPageScraper(
 
         // Regex matching the official Michelin image format:
         // https://prod-pics.guide.michelin.com/api/public/content/<hash>.<ext>
+internal fun parseOpeningHours(html: String): String? {
+        try {
+            val allDays = listOf(
+                "Monday", "Tuesday", "Wednesday", "Thursday",
+                "Friday", "Saturday", "Sunday"
+            )
+            val result = linkedMapOf<String, MutableList<String>>()
+            val dayPattern = Pattern.compile(
+                "\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun)\\b",
+                Pattern.CASE_INSENSITIVE
+            )
+            val timePattern = Pattern.compile(
+                "\\b(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s*[AaPp][Mm])?\\s*(?:[-–—]|to)\\s*(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s*[AaPp][Mm])?\\b|\\b(?:1[0-2]|0?[1-9])\\s*[AaPp][Mm]\\s*(?:[-–—]|to)\\s*(?:1[0-2]|0?[1-9])\\s*[AaPp][Mm]\\b",
+                Pattern.CASE_INSENSITIVE
+            )
+
+            fun addTimes(day: String, text: String) {
+                val matcher = timePattern.matcher(text)
+                while (matcher.find()) {
+                    val normalized = matcher.group()
+                        .replace(Regex("\\s+"), " ")
+                        .replace(Regex("\\s*[-–—]\\s*"), "–")
+                        .replace(Regex("\\s+to\\s+", RegexOption.IGNORE_CASE), "–")
+                        .trim()
+                    result.getOrPut(day) { mutableListOf() }.add(normalized)
+                }
+            }
+
+            val text = htmlFragmentToText(html)
+            val dayMatcher = dayPattern.matcher(text)
+            val dayRanges = mutableListOf<Pair<String, Int>>()
+            while (dayMatcher.find()) {
+                val day = normalizeDay(dayMatcher.group(1)) ?: continue
+                dayRanges.add(day to dayMatcher.end())
+            }
+
+            for (index in dayRanges.indices) {
+                val (day, startOffset) = dayRanges[index]
+                val endOffset = if (index + 1 < dayRanges.size) dayRanges[index + 1].second else text.length
+                val section = text.substring(startOffset, endOffset)
+                addTimes(day, section)
+            }
+
+            // Also inspect JSON-LD openingHours values, but extract only time ranges from them.
+            val ld = Pattern.compile(
+                "\\"openingHours\\"\\s*:\\s*(\\[[^\\]]+\\]|\\"[^\\"]+\\")",
+                Pattern.CASE_INSENSITIVE
+            ).matcher(html)
+            while (ld.find()) {
+                val raw = ld.group(1)
+                val values = Regex("\\"([^\\"]+)\\"").findAll(raw)
+                    .map { it.groupValues[1] }
+                    .toList()
+                for (value in values) {
+                    val m = dayPattern.matcher(value)
+                    if (!m.find()) continue
+                    val day = normalizeDay(m.group(1)) ?: continue
+                    addTimes(day, value.substring(m.end()))
+                }
+            }
+
+            if (result.isEmpty()) return null
+
+            return allDays.joinToString("\\n") { day ->
+                val unique = result[day].orEmpty().distinct()
+                "$day: " + if (unique.isEmpty()) "Closed" else unique.joinToString(", ")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing opening hours", e)
+            return null
+        }
+    }
+
+
         val PROD_PICS_PATTERN = Pattern.compile(
             """https://prod-pics\.guide\.michelin\.com/api/public/content/([a-zA-Z0-9_-]+)\.(?:jpg|jpeg|png|webp)""",
             Pattern.CASE_INSENSITIVE
@@ -175,78 +249,6 @@ class MichelinPageScraper(
         return System.currentTimeMillis() - restaurant.openingHoursLastFetched > ONE_MONTH_MS
     }
 
-    private fun parseOpeningHours(html: String): String? {
-        try {
-            val allDays = listOf(
-                "Monday", "Tuesday", "Wednesday", "Thursday",
-                "Friday", "Saturday", "Sunday"
-            )
-            val result = linkedMapOf<String, MutableList<String>>()
-            val dayPattern = Pattern.compile(
-                "\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun)\\b",
-                Pattern.CASE_INSENSITIVE
-            )
-            val timePattern = Pattern.compile(
-                "\\b(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s*[AaPp][Mm])?\\s*(?:[-–—]|to)\\s*(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s*[AaPp][Mm])?\\b|\\b(?:1[0-2]|0?[1-9])\\s*[AaPp][Mm]\\s*(?:[-–—]|to)\\s*(?:1[0-2]|0?[1-9])\\s*[AaPp][Mm]\\b",
-                Pattern.CASE_INSENSITIVE
-            )
-
-            fun addTimes(day: String, text: String) {
-                val matcher = timePattern.matcher(text)
-                while (matcher.find()) {
-                    val normalized = matcher.group()
-                        .replace(Regex("\\s+"), " ")
-                        .replace(Regex("\\s*[-–—]\\s*"), "–")
-                        .replace(Regex("\\s+to\\s+", RegexOption.IGNORE_CASE), "–")
-                        .trim()
-                    result.getOrPut(day) { mutableListOf() }.add(normalized)
-                }
-            }
-
-            val text = htmlFragmentToText(html)
-            val dayMatcher = dayPattern.matcher(text)
-            val dayRanges = mutableListOf<Pair<String, Int>>()
-            while (dayMatcher.find()) {
-                val day = normalizeDay(dayMatcher.group(1)) ?: continue
-                dayRanges.add(day to dayMatcher.end())
-            }
-
-            for (index in dayRanges.indices) {
-                val (day, startOffset) = dayRanges[index]
-                val endOffset = if (index + 1 < dayRanges.size) dayRanges[index + 1].second else text.length
-                val section = text.substring(startOffset, endOffset)
-                addTimes(day, section)
-            }
-
-            // Also inspect JSON-LD openingHours values, but extract only time ranges from them.
-            val ld = Pattern.compile(
-                "\\"openingHours\\"\\s*:\\s*(\\[[^\\]]+\\]|\\"[^\\"]+\\")",
-                Pattern.CASE_INSENSITIVE
-            ).matcher(html)
-            while (ld.find()) {
-                val raw = ld.group(1)
-                val values = Regex("\\"([^\\"]+)\\"").findAll(raw)
-                    .map { it.groupValues[1] }
-                    .toList()
-                for (value in values) {
-                    val m = dayPattern.matcher(value)
-                    if (!m.find()) continue
-                    val day = normalizeDay(m.group(1)) ?: continue
-                    addTimes(day, value.substring(m.end()))
-                }
-            }
-
-            if (result.isEmpty()) return null
-
-            return allDays.joinToString("\\n") { day ->
-                val unique = result[day].orEmpty().distinct()
-                "$day: " + if (unique.isEmpty()) "Closed" else unique.joinToString(", ")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing opening hours", e)
-            return null
-        }
-    }
 
     private fun htmlFragmentToText(value: String): String {
         return value

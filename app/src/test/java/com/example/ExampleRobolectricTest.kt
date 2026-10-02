@@ -119,7 +119,7 @@ class ExampleRobolectricTest {
             </div>
         """.trimIndent()
 
-        val parsed = MichelinPageScraper.parseOpeningHours(html)
+        val parsed = requireNotNull(MichelinPageScraper.parseOpeningHours(html))
 
         assertEquals(
             """Monday: 11:30–14:00, 17:30–21:30
@@ -131,7 +131,7 @@ Saturday: Closed
 Sunday: 12:00–15:00, 18:30–22:00""",
             parsed
         )
-        assertTrue(!parsed!!.contains("Opening hours"))
+        assertTrue(!parsed.contains("Opening hours"))
         assertTrue(!parsed.contains("Reserve a table"))
         assertTrue(!parsed.contains("Address"))
         assertTrue(!parsed.contains("public holidays"))

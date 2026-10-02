@@ -20,6 +20,13 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    // Resolve the Maps key during normal Android configuration so the manifest
+    // merger always receives the CI/local value. Do not defer this to
+    // gradle.projectsEvaluated, because manifest processing can be configured
+    // before that callback runs.
+    manifestPlaceholders["MAPS_API_KEY"] =
+      System.getenv("MAPS_API_KEY")?.takeIf { it.isNotBlank() } ?: "DEFAULT_API_KEY"
   }
 
   signingConfigs {
@@ -56,8 +63,6 @@ android {
   }
 }
 
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects.
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
@@ -66,17 +71,6 @@ secrets {
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
-// CI provides MAPS_API_KEY as an environment variable. Apply it after the
-// Secrets Gradle Plugin has finished configuring its default properties so the
-// CI value cannot be replaced by .env.example.
-gradle.projectsEvaluated {
-  System.getenv("MAPS_API_KEY")?.takeIf { it.isNotBlank() }?.let { mapsApiKey ->
-    android.defaultConfig.manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
-  }
-}
-
-// Some unused dependencies are commented out below instead of being removed.
-// This makes it easy to add them back in the future if needed.
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))

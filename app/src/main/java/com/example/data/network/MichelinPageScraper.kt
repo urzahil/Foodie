@@ -177,69 +177,75 @@ class MichelinPageScraper(
 
     private fun parseOpeningHours(html: String): String? {
         try {
+            val allDays = listOf(
+                "Monday", "Tuesday", "Wednesday", "Thursday",
+                "Friday", "Saturday", "Sunday"
+            )
             val result = linkedMapOf<String, MutableList<String>>()
-            val cardPattern = Pattern.compile("<div[^>]*class=[\\\"'][^\\\"']*card-borderline[^\\\"']*[\\\"'][^>]*>(.*?)(?=<div[^>]*class=[\\\"'][^\\\"']*card-borderline[^\\\"']*[\\\"'][^>]*>|$)", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
-            val dayPattern = Pattern.compile("\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun)\\b", Pattern.CASE_INSENSITIVE)
-            val cards = cardPattern.matcher(html)
-            while (cards.find()) {
-                val cardText = htmlFragmentToText(cards.group(1))
-                val dayMatcher = dayPattern.matcher(cardText)
-                if (!dayMatcher.find()) continue
-                val day = normalizeDay(dayMatcher.group(1)) ?: continue
-                val afterDay = cardText.substring(dayMatcher.end()).trim()
-                val periods = afterDay.split('\n').map { it.trim() }.filter { it.isNotBlank() }
-                    .filterNot { it.equals("Opening hours", true) || it.equals("Hours", true) }
-                result.getOrPut(day) { mutableListOf() }.addAll(periods)
+            val dayPattern = Pattern.compile(
+                "\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun)\\b",
+                Pattern.CASE_INSENSITIVE
+            )
+            val timePattern = Pattern.compile(
+                "\\b(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s*[AaPp][Mm])?\\s*(?:[-–—]|to)\\s*(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s*[AaPp][Mm])?\\b|\\b(?:1[0-2]|0?[1-9])\\s*[AaPp][Mm]\\s*(?:[-–—]|to)\\s*(?:1[0-2]|0?[1-9])\\s*[AaPp][Mm]\\b",
+                Pattern.CASE_INSENSITIVE
+            )
+
+            fun addTimes(day: String, text: String) {
+                val matcher = timePattern.matcher(text)
+                while (matcher.find()) {
+                    val normalized = matcher.group()
+                        .replace(Regex("\\s+"), " ")
+                        .replace(Regex("\\s*[-–—]\\s*"), "–")
+                        .replace(Regex("\\s+to\\s+", RegexOption.IGNORE_CASE), "–")
+                        .trim()
+                    result.getOrPut(day) { mutableListOf() }.add(normalized)
+                }
             }
-            val ld = Pattern.compile("\\\"openingHours\\\"\\s*:\\s*(\\[[^\\]]+\\]|\\\"[^\\\"]+\\\")", Pattern.CASE_INSENSITIVE).matcher(html)
-            if (ld.find()) {
+
+            val text = htmlFragmentToText(html)
+            val dayMatcher = dayPattern.matcher(text)
+            val dayRanges = mutableListOf<Pair<String, Int>>()
+            while (dayMatcher.find()) {
+                val day = normalizeDay(dayMatcher.group(1)) ?: continue
+                dayRanges.add(day to dayMatcher.end())
+            }
+
+            for (index in dayRanges.indices) {
+                val (day, startOffset) = dayRanges[index]
+                val endOffset = if (index + 1 < dayRanges.size) dayRanges[index + 1].second else text.length
+                val section = text.substring(startOffset, endOffset)
+                addTimes(day, section)
+            }
+
+            // Also inspect JSON-LD openingHours values, but extract only time ranges from them.
+            val ld = Pattern.compile(
+                "\\"openingHours\\"\\s*:\\s*(\\[[^\\]]+\\]|\\"[^\\"]+\\")",
+                Pattern.CASE_INSENSITIVE
+            ).matcher(html)
+            while (ld.find()) {
                 val raw = ld.group(1)
-                val values = Regex("\\\"([^\\\"]+)\\\"").findAll(raw).map { it.groupValues[1] }.toList()
+                val values = Regex("\\"([^\\"]+)\\"").findAll(raw)
+                    .map { it.groupValues[1] }
+                    .toList()
                 for (value in values) {
                     val m = dayPattern.matcher(value)
                     if (!m.find()) continue
                     val day = normalizeDay(m.group(1)) ?: continue
-                    val period = value.substring(m.end()).trim().trimStart(':', '-', '–')
-                    if (period.isNotBlank()) result.getOrPut(day) { mutableListOf() }.add(period)
-                }
-            }
-            // If any day card was malformed or omitted, use the rendered text only to fill
-            // missing days. This prevents a partial card parse from suppressing Sunday.
-            val allDays = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-            if (result.size < allDays.size) {
-                val text = htmlFragmentToText(html)
-                val fallback = dayPattern.matcher(text)
-                while (fallback.find()) {
-                    val day = normalizeDay(fallback.group(1)) ?: continue
-                    if (result.containsKey(day)) continue
-                    val nextMatcher = dayPattern.matcher(text).apply { region(fallback.end(), text.length) }
-                    val next = if (nextMatcher.find()) nextMatcher.start() else text.length
-                    val value = text.substring(fallback.end(), next).trim()
-                    if (value.isNotBlank()) result[day] = mutableListOf(value)
+                    addTimes(day, value.substring(m.end()))
                 }
             }
 
-            if (result.isNotEmpty()) {
-                return result.entries.joinToString("\n") { (day, periods) ->
-                    val unique = periods.distinct()
-                    day + ": " + if (unique.isEmpty()) "Closed" else unique.joinToString(", ")
-                }
+            if (result.isEmpty()) return null
+
+            return allDays.joinToString("\\n") { day ->
+                val unique = result[day].orEmpty().distinct()
+                "$day: " + if (unique.isEmpty()) "Closed" else unique.joinToString(", ")
             }
-            val text = htmlFragmentToText(html)
-            val fallback = dayPattern.matcher(text)
-            val fallbackResult = linkedMapOf<String, String>()
-            while (fallback.find()) {
-                val day = normalizeDay(fallback.group(1)) ?: continue
-                val nextMatcher = dayPattern.matcher(text).apply { region(fallback.end(), text.length) }
-                val next = if (nextMatcher.find()) nextMatcher.start() else text.length
-                val value = text.substring(fallback.end(), next).trim()
-                if (value.isNotBlank()) fallbackResult[day] = value
-            }
-            if (fallbackResult.isNotEmpty()) return fallbackResult.entries.joinToString("\n") { it.key + ": " + it.value }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing opening hours", e)
+            return null
         }
-        return null
     }
 
     private fun htmlFragmentToText(value: String): String {

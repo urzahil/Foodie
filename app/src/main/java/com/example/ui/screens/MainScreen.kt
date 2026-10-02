@@ -95,6 +95,8 @@ fun MainScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val filteredList by viewModel.filteredRestaurants.collectAsStateWithLifecycle()
+    val availableCuisines by viewModel.availableCuisines.collectAsStateWithLifecycle()
+    val selectedRestaurant by viewModel.selectedRestaurant.collectAsStateWithLifecycle()
     val syncState by viewModel.syncState.collectAsStateWithLifecycle()
 
     var showMenu by remember { mutableStateOf(false) }
@@ -132,13 +134,14 @@ fun MainScreen(
         }
     }
 
-    // If details screen is open, show details screen
-    if (uiState.selectedRestaurantForDetails != null) {
+    // Details observes the selected restaurant by ID, so favorite/visited/image/hour updates
+    // are always rendered from the Room source of truth.
+    if (selectedRestaurant != null) {
         RestaurantDetailsScreen(
-            restaurant = uiState.selectedRestaurantForDetails!!,
+            restaurant = selectedRestaurant,
             onBack = { viewModel.closeRestaurantDetails() },
-            onToggleFavorite = { viewModel.toggleFavorite(uiState.selectedRestaurantForDetails!!) },
-            onToggleVisited = { notes -> viewModel.toggleVisited(uiState.selectedRestaurantForDetails!!, notes) }
+            onToggleFavorite = { viewModel.toggleFavorite(selectedRestaurant) },
+            onToggleVisited = { notes -> viewModel.toggleVisited(selectedRestaurant, notes) }
         )
         return
     }
@@ -419,7 +422,7 @@ fun MainScreen(
 
             // Cuisine dropdown filter
             CuisineDropdownFilter(
-                availableCuisines = uiState.availableCuisines,
+                availableCuisines = availableCuisines,
                 selectedCuisine = uiState.selectedCuisine,
                 onCuisineSelected = { viewModel.selectCuisine(it) }
             )

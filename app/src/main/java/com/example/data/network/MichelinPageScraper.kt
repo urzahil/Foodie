@@ -284,3 +284,4 @@ class MichelinPageScraper(
             .replace("&nbsp;", " ")
             .trim()
     }
+}

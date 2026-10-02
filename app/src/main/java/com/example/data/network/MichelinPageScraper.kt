@@ -206,7 +206,7 @@ class MichelinPageScraper(
                 if (!dayMatcher.find()) continue
                 val day = normalizeDay(dayMatcher.group(1)) ?: continue
                 val afterDay = cardText.substring(dayMatcher.end()).trim()
-                val periods = afterDay.split('\\n').map { it.trim() }.filter { it.isNotBlank() }
+                val periods = afterDay.split('\n').map { it.trim() }.filter { it.isNotBlank() }
                     .filterNot { it.equals("Opening hours", true) || it.equals("Hours", true) }
                 result.getOrPut(day) { mutableListOf() }.addAll(periods)
             }
@@ -223,7 +223,7 @@ class MichelinPageScraper(
                 }
             }
             if (result.isNotEmpty()) {
-                return result.entries.joinToString("\\n") { (day, periods) ->
+                return result.entries.joinToString("\n") { (day, periods) ->
                     val unique = periods.distinct()
                     day + ": " + if (unique.isEmpty()) "Closed" else unique.joinToString(", ")
                 }
@@ -237,7 +237,7 @@ class MichelinPageScraper(
                 val value = text.substring(fallback.end(), next).trim()
                 if (value.isNotBlank()) fallbackResult[day] = value
             }
-            if (fallbackResult.isNotEmpty()) return fallbackResult.entries.joinToString("\\n") { it.key + ": " + it.value }
+            if (fallbackResult.isNotEmpty()) return fallbackResult.entries.joinToString("\n") { it.key + ": " + it.value }
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing opening hours", e)
         }
@@ -246,13 +246,13 @@ class MichelinPageScraper(
 
     private fun htmlFragmentToText(value: String): String {
         return value
-            .replace(Regex("(?i)<br\\s*/?>"), "\\n")
-            .replace(Regex("(?i)</(div|li|p|tr|td|th|section|article)>"), "\\n")
+            .replace(Regex("(?i)<br\\s*/?>"), "\n")
+            .replace(Regex("(?i)</(div|li|p|tr|td|th|section|article)>"), "\n")
             .replace(Regex("<[^>]+>"), " ")
             .replace("&nbsp;", " ").replace("&amp;", "&").replace("&ndash;", "–").replace("&mdash;", "—")
             .replace(Regex("[ \\t]+"), " ")
-            .replace(Regex("\\n[ \\t]+"), "\\n")
-            .replace(Regex("[ \\t]+\\n"), "\\n")
+            .replace(Regex("\\n[ \\t]+"), "\n")
+            .replace(Regex("[ \\t]+\\n"), "\n")
             .trim()
     }
     private fun normalizeDay(value: String): String? {

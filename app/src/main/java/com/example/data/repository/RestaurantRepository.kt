@@ -69,12 +69,8 @@ class RestaurantRepository(
     }
 
     private suspend fun loadCityLocations() = withContext(Dispatchers.IO) {
-        val all = dao.getAllDirect()
-        val byCity = all.groupBy { it.location }.filterKeys { it.isNotBlank() }
-        cachedCityLocations = byCity.map { (city, list) ->
-            val avgLat = list.map { it.latitude }.average()
-            val avgLng = list.map { it.longitude }.average()
-            LocationTarget(name = city, latitude = avgLat, longitude = avgLng)
+        cachedCityLocations = dao.getCityLocations().map {
+            LocationTarget(name = it.location, latitude = it.latitude, longitude = it.longitude)
         }
     }
 

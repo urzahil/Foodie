@@ -66,7 +66,7 @@ internal fun parseOpeningHours(html: String): String? {
 
             // Also inspect JSON-LD openingHours values, but extract only time ranges from them.
             val ld = Pattern.compile(
-                "\\"openingHours\\"\\s*:\\s*(\\[[^\\]]+\\]|\\"[^\\"]+\\")",
+                """\"openingHours\"\s*:\s*(\[[^\]]+\]|\"[^\"]+\")""",
                 Pattern.CASE_INSENSITIVE
             ).matcher(html)
             while (ld.find()) {

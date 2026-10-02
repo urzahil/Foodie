@@ -11,7 +11,8 @@ import androidx.room.PrimaryKey
         Index(value = ["award"]),
         Index(value = ["location"]),
         Index(value = ["isFavorite"]),
-        Index(value = ["isVisited"])
+        Index(value = ["isVisited"]),
+        Index(value = ["latitude", "longitude"])
     ]
 )
 data class RestaurantEntity(

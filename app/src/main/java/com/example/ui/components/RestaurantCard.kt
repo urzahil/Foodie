@@ -65,8 +65,12 @@ fun RestaurantCard(
 ) {
     val context = LocalContext.current
 
-    // Coil owns image caching. Loading is triggered only for visible cards;
-    // no synchronous filesystem checks and no list-wide prefetch are performed.
+    LaunchedEffect(restaurant.id, restaurant.imageUrl) {
+        onEnsureImageDownloaded()
+    }
+
+    val imageSource: Any? = restaurant.imageUrl
+        ?.takeIf { it.isNotBlank() && !it.contains("unsplash.com") }
 
     Card(
         modifier = modifier

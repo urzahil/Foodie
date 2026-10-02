@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.R
-import com.example.data.local.RestaurantEntity
+import com.example.data.local.RestaurantListItem
 import com.example.location.LocationHelper
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.GreenStarColor
@@ -52,11 +52,10 @@ import com.example.ui.theme.MichelinGold
 import com.example.ui.theme.MichelinRed
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-import java.io.File
 
 @Composable
 fun RestaurantCard(
-    restaurant: RestaurantEntity,
+    restaurant: RestaurantListItem,
     distanceKm: Double?,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
@@ -66,18 +65,12 @@ fun RestaurantCard(
 ) {
     val context = LocalContext.current
 
-    LaunchedEffect(restaurant.id, restaurant.localImagePath) {
+    LaunchedEffect(restaurant.id, restaurant.imageUrl) {
         onEnsureImageDownloaded()
     }
 
-    val imageFile = if (restaurant.localImagePath != null) File(restaurant.localImagePath) else null
-    val hasValidLocalFile = imageFile != null && imageFile.exists() && imageFile.length() > 0L
-
-    val imageSource: Any? = when {
-        hasValidLocalFile -> imageFile!!
-        !restaurant.imageUrl.isNullOrBlank() && !restaurant.imageUrl!!.contains("unsplash.com") -> restaurant.imageUrl!!
-        else -> null
-    }
+    val imageSource: Any? = restaurant.imageUrl
+        ?.takeIf { it.isNotBlank() && !it.contains("unsplash.com") }
 
     Card(
         modifier = modifier

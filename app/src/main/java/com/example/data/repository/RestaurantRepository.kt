@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.example.data.local.RestaurantDao
 import com.example.data.local.RestaurantEntity
+import com.example.data.local.RestaurantListItem
+import com.example.data.local.ImportedUserState
 import com.example.data.network.MichelinCsvDownloader
 import com.example.data.network.MichelinPageScraper
 import com.example.data.network.SyncState
@@ -38,7 +40,11 @@ class RestaurantRepository(
 
     val syncState: StateFlow<SyncState> = downloader.syncState
 
-    val allRestaurants: Flow<List<RestaurantEntity>> = dao.getAllRestaurants()
+    val allRestaurants: Flow<List<RestaurantListItem>> = dao.getAllListItems()
+
+    fun observeInBox(minLat: Double, maxLat: Double, minLng: Double, maxLng: Double): Flow<List<RestaurantListItem>> =
+        dao.observeInBox(minLat, maxLat, minLng, maxLng)
+
     val favorites: Flow<List<RestaurantEntity>> = dao.getFavorites()
     val visited: Flow<List<RestaurantEntity>> = dao.getVisited()
 
@@ -63,12 +69,8 @@ class RestaurantRepository(
     }
 
     private suspend fun loadCityLocations() = withContext(Dispatchers.IO) {
-        val all = dao.getAllDirect()
-        val byCity = all.groupBy { it.location }.filterKeys { it.isNotBlank() }
-        cachedCityLocations = byCity.map { (city, list) ->
-            val avgLat = list.map { it.latitude }.average()
-            val avgLng = list.map { it.longitude }.average()
-            LocationTarget(name = city, latitude = avgLat, longitude = avgLng)
+        cachedCityLocations = dao.getCityLocations().map {
+            LocationTarget(name = it.location, latitude = it.latitude, longitude = it.longitude)
         }
     }
 
@@ -121,35 +123,26 @@ class RestaurantRepository(
     fun getRestaurantById(id: Long): Flow<RestaurantEntity?> = dao.getRestaurantById(id)
 
     suspend fun toggleFavorite(restaurant: RestaurantEntity) = withContext(Dispatchers.IO) {
-        val newFav = !restaurant.isFavorite
-        dao.updateFavorite(
-            restaurant.id,
-            newFav,
-            if (newFav) System.currentTimeMillis() else 0L
-        )
+        dao.toggleFavorite(restaurant.id, System.currentTimeMillis())
     }
 
     suspend fun toggleVisited(restaurant: RestaurantEntity, notes: String = "") = withContext(Dispatchers.IO) {
-        val newVisited = !restaurant.isVisited
-        dao.updateVisited(
-            restaurant.id,
-            newVisited,
-            if (newVisited) System.currentTimeMillis() else 0L,
-            if (newVisited) notes else ""
-        )
+        dao.toggleVisited(restaurant.id, System.currentTimeMillis(), notes)
     }
 
-    fun isImageExpired(restaurant: RestaurantEntity): Boolean {
-        return scraper.isImageExpired(restaurant)
+    suspend fun toggleFavorite(id: Long) = withContext(Dispatchers.IO) {
+        dao.toggleFavorite(id, System.currentTimeMillis())
     }
 
-    suspend fun fetchRestaurantDetails(restaurant: RestaurantEntity): RestaurantEntity {
-        return scraper.fetchAndStoreDetails(restaurant)
+    suspend fun toggleVisited(id: Long, notes: String = "") = withContext(Dispatchers.IO) {
+        dao.toggleVisited(id, System.currentTimeMillis(), notes)
     }
 
-    /**
-     * Exports all favorite and visited restaurants as a standard JSON string.
-     */
+    fun isImageExpired(restaurant: RestaurantEntity): Boolean = scraper.isImageExpired(restaurant)
+
+    suspend fun fetchRestaurantDetails(restaurant: RestaurantEntity): RestaurantEntity =
+        scraper.fetchAndStoreDetails(restaurant)
+
     suspend fun exportFavoritesAndVisitedJson(): String = withContext(Dispatchers.IO) {
         val all = dao.getAllDirect()
         val exported = all.filter { it.isFavorite || it.isVisited }
@@ -185,42 +178,52 @@ class RestaurantRepository(
     suspend fun importFavoritesAndVisitedJson(jsonString: String): Int = withContext(Dispatchers.IO) {
         try {
             val root = JSONObject(jsonString)
-            val array = root.optJSONArray("restaurants") ?: return@withContext 0
+            val version = root.optInt("version", -1)
+            if (version !in setOf(1, 2)) return@withContext -1
+
+            val array = root.optJSONArray("restaurants") ?: return@withContext -1
             val all = dao.getAllDirect()
+            val bySourceKey = all.associateBy { it.sourceKey }
+            val byUrl = all.filter { it.url.isNotBlank() }
+                .groupBy { it.url }
+                .mapValues { (_, matches) -> matches.singleOrNull() }
+            val byNameLocation = all.groupBy {
+                "${it.name.lowercase().trim()}|${it.location.lowercase().trim()}"
+            }.mapValues { (_, matches) -> matches.singleOrNull() }
 
-            // Overwrite any existing favourites and visited
-            dao.clearAllFavoritesAndVisited()
-
-            // Index local DB by url and name
-            val byUrl = all.associateBy { it.url }
-            val byName = all.associateBy { it.name.lowercase().trim() }
-
-            var updatedCount = 0
+            val states = ArrayList<ImportedUserState>(array.length())
             for (i in 0 until array.length()) {
-                val obj = array.getJSONObject(i)
-                val url = obj.optString("url")
-                val name = obj.optString("name")
-                val isFav = obj.optBoolean("isFavorite", false)
-                val favTime = obj.optLong("favoriteTimestamp", System.currentTimeMillis())
-                val isVisited = obj.optBoolean("isVisited", false)
-                val visitedTime = obj.optLong("visitedTimestamp", System.currentTimeMillis())
-                val notes = obj.optString("visitedNotes", "")
+                val obj = array.optJSONObject(i) ?: return@withContext -1
+                val sourceKey = obj.optString("sourceKey").trim()
+                val url = obj.optString("url").trim()
+                val name = obj.optString("name").trim()
+                val location = obj.optString("location").trim()
 
-                val target = byUrl[url] ?: byName[name.lowercase().trim()]
-                if (target != null) {
-                    if (isFav) {
-                        dao.updateFavorite(target.id, true, favTime)
-                    }
-                    if (isVisited) {
-                        dao.updateVisited(target.id, true, visitedTime, notes)
-                    }
-                    updatedCount++
-                }
+                val target = when {
+                    sourceKey.isNotBlank() -> bySourceKey[sourceKey]
+                    url.isNotBlank() -> byUrl[url]
+                    name.isNotBlank() -> byNameLocation[
+                        "${name.lowercase()}|${location.lowercase()}"
+                    ]
+                    else -> null
+                } ?: return@withContext -1
+
+                states += ImportedUserState(
+                    sourceKey = target.sourceKey,
+                    isFavorite = obj.optBoolean("isFavorite", false),
+                    favoriteTimestamp = obj.optLong("favoriteTimestamp", 0L),
+                    isVisited = obj.optBoolean("isVisited", false),
+                    visitedTimestamp = obj.optLong("visitedTimestamp", 0L),
+                    visitedNotes = obj.optString("visitedNotes", "")
+                )
             }
-            return@withContext updatedCount
+
+            dao.restoreUserState(states)
+            states.count { it.isFavorite || it.isVisited }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to import JSON", e)
-            return@withContext -1
+            -1
         }
     }
+
 }

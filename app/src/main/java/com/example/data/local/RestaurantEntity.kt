@@ -11,7 +11,8 @@ import androidx.room.PrimaryKey
         Index(value = ["award"]),
         Index(value = ["location"]),
         Index(value = ["isFavorite"]),
-        Index(value = ["isVisited"])
+        Index(value = ["isVisited"]),
+        Index(value = ["latitude", "longitude"])
     ]
 )
 data class RestaurantEntity(
@@ -45,5 +46,7 @@ data class RestaurantEntity(
     val favoriteTimestamp: Long = 0L,
     val isVisited: Boolean = false,
     val visitedTimestamp: Long = 0L,
-    val visitedNotes: String = ""
+    val visitedNotes: String = "",
+    /** Monotonic token used by catalogue sync to reconcile rows without touching user state. */
+    val catalogueLastSeen: Long = 0L
 )

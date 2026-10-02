@@ -48,7 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.local.RestaurantEntity
+import com.example.data.local.RestaurantListItem
 import com.example.location.LocationHelper
 import com.example.location.LocationTarget
 import com.example.ui.FoodieViewModel
@@ -82,7 +82,7 @@ fun RestaurantMapTab(
     activeLocation: LocationTarget?,
     mapRecenterTrigger: Long = 0L,
     viewModel: FoodieViewModel,
-    onRestaurantClick: (RestaurantEntity) -> Unit,
+    onRestaurantClick: (RestaurantListItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current

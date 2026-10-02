@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.FoodieApp
 import com.example.data.local.RestaurantEntity
+import com.example.data.local.RestaurantListItem
 import com.example.data.network.SyncState
 import com.example.data.repository.AutocompleteSuggestion
 import com.example.data.repository.RestaurantRepository
@@ -19,9 +20,17 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 enum class MichelinAwardFilter(val label: String, val dbMatch: String) {
     THREE_STARS("3 Stars", "3 Stars"),
@@ -38,8 +47,21 @@ enum class SpecialListMode {
 }
 
 data class RestaurantWithDistance(
-    val restaurant: RestaurantEntity,
+    val restaurant: RestaurantListItem,
     val distanceKm: Double?
+)
+
+private data class FilterParams(
+    val query: String,
+    val location: LocationTarget?,
+    val awards: Set<MichelinAwardFilter>,
+    val cuisine: String?,
+    val mode: SpecialListMode
+)
+
+private data class FilteredResult(
+    val items: List<RestaurantWithDistance>,
+    val availableCuisines: List<String>
 )
 
 data class UiState(
@@ -51,7 +73,6 @@ data class UiState(
     val mapRecenterTrigger: Long = 0L,
     val listResetTrigger: Long = 0L,
     val selectedFilters: Set<MichelinAwardFilter> = emptySet(),
-    val availableCuisines: List<String> = emptyList(),
     val selectedCuisine: String? = null,
     val specialMode: SpecialListMode = SpecialListMode.ALL,
     val selectedTabIndex: Int = 0, // 0 = List, 1 = Map
@@ -59,7 +80,7 @@ data class UiState(
     val isSearchingAutocomplete: Boolean = false,
     val isLocatingGps: Boolean = false,
     val gpsErrorMessage: String? = null,
-    val selectedRestaurantForDetails: RestaurantEntity? = null,
+    val selectedRestaurantId: Long? = null,
     val showBackupDialog: Boolean = false,
     val backupJsonText: String? = null,
     val toastMessage: String? = null
@@ -87,7 +108,8 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
     var lastHandledRecenterTrigger: Long = 0L
 
     private var autocompleteJob: Job? = null
-    private val downloadingIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    private val imageDownloadSemaphore = Semaphore(3)
+    private val imageRetryAfter = java.util.concurrent.ConcurrentHashMap<Long, Long>()
 
     init {
         restoreLastState()
@@ -95,36 +117,6 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
             // Sync metadata only. Images/details are fetched on demand for visible
             // restaurants or when the user opens a restaurant.
             repository.syncIfNeeded(force = false)
-        }
-    }
-
-    fun ensureRestaurantImageDownloaded(restaurant: RestaurantEntity) {
-        if (repository.isImageExpired(restaurant) && downloadingIds.add(restaurant.id)) {
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    repository.fetchRestaurantDetails(restaurant)
-                } catch (e: Exception) {
-                    android.util.Log.w("FoodieViewModel", "Image download failed for ${restaurant.name}: ${e.message}")
-                } finally {
-                    downloadingIds.remove(restaurant.id)
-                }
-            }
-        }
-    }
-
-    fun onRestaurantsListed(restaurants: List<RestaurantEntity>) {
-        viewModelScope.launch(Dispatchers.IO) {
-            // Prioritize first 25 listed items
-            for (r in restaurants.take(25)) {
-                if (repository.isImageExpired(r) && downloadingIds.add(r.id)) {
-                    try {
-                        repository.fetchRestaurantDetails(r)
-                    } catch (_: Exception) {}
-                    finally {
-                        downloadingIds.remove(r.id)
-                    }
-                }
-            }
         }
     }
 
@@ -172,99 +164,147 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // Combine raw restaurants from Room with filters and 30km distance limit
-    val filteredRestaurants: StateFlow<List<RestaurantWithDistance>> = combine(
-        repository.allRestaurants,
-        _uiState
-    ) { all, state ->
-        withContext(Dispatchers.Default) {
-            var list = all
+    private val filterParams: StateFlow<FilterParams> = _uiState
+        .map {
+            FilterParams(
+                query = it.searchQuery,
+                location = it.activeLocation,
+                awards = it.selectedFilters,
+                cuisine = it.selectedCuisine,
+                mode = it.specialMode
+            )
+        }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, FilterParams("", null, emptySet(), null, SpecialListMode.ALL))
 
-            // Special list mode (Favorites / Visited)
-            list = when (state.specialMode) {
-                SpecialListMode.FAVORITES_ONLY -> list.filter { it.isFavorite }
-                SpecialListMode.VISITED_ONLY -> list.filter { it.isVisited }
-                SpecialListMode.ALL -> list
-            }
+    private fun candidatesFor(params: FilterParams): kotlinx.coroutines.flow.Flow<List<RestaurantListItem>> {
+        val loc = params.location
+        if (params.mode != SpecialListMode.ALL || loc == null) {
+            return repository.allRestaurants
+        }
 
-            // Award Filters (multi-select)
-            if (state.selectedFilters.isNotEmpty()) {
-                val dbMatches = state.selectedFilters.map { it.dbMatch }
-                list = list.filter { r ->
-                    dbMatches.any { match -> r.award.contains(match, ignoreCase = true) }
-                }
-            }
+        val radius = LocationHelper.MAX_RADIUS_KM
+        val latDelta = radius / 111.0
+        val cosLat = kotlin.math.cos(Math.toRadians(loc.latitude)).coerceAtLeast(0.01)
+        val lngDelta = radius / (111.0 * cosLat)
+        val minLat = (loc.latitude - latDelta).coerceIn(-90.0, 90.0)
+        val maxLat = (loc.latitude + latDelta).coerceIn(-90.0, 90.0)
+        val minLng = loc.longitude - lngDelta
+        val maxLng = loc.longitude + lngDelta
 
-            // Text search if entered (restaurant name, cuisine, location, or address)
-            if (state.searchQuery.isNotBlank() && state.searchQuery.length >= 2) {
-                val q = state.searchQuery.lowercase().trim()
-                list = list.filter { r ->
-                    r.name.lowercase().contains(q) ||
-                            r.cuisine.lowercase().contains(q) ||
-                            r.location.lowercase().contains(q) ||
-                            r.address.lowercase().contains(q)
-                }
-            }
+        return if (minLng < -180.0 || maxLng > 180.0) {
+            // Dateline-crossing locations are rare; fall back to the slim projection
+            // rather than issuing an incorrect longitude range.
+            repository.allRestaurants
+        } else {
+            repository.observeInBox(minLat, maxLat, minLng, maxLng)
+        }
+    }
 
-            // Distance calculation & 30km limit
-            val loc = state.activeLocation
-            val baseList: List<RestaurantWithDistance> = if (loc != null) {
-                val withDist = list.mapNotNull { r ->
-                    val dist = LocationHelper.calculateDistanceKm(
-                        loc.latitude, loc.longitude,
-                        r.latitude, r.longitude
-                    )
-                    // If in Special mode (Favorites/Visited) or general location search:
-                    if (state.specialMode != SpecialListMode.ALL) {
-                        RestaurantWithDistance(r, dist)
-                    } else if (dist <= LocationHelper.MAX_RADIUS_KM) {
-                        RestaurantWithDistance(r, dist)
-                    } else {
-                        null
-                    }
-                }
-                withDist.sortedBy { it.distanceKm }
-            } else {
-                list.map { RestaurantWithDistance(it, null) }
-            }
+    private fun applyFilters(
+        candidates: List<RestaurantListItem>,
+        params: FilterParams
+    ): FilteredResult {
+        var list = candidates
 
-            // Extract unique cuisines strictly from the results
-            val cuisinesForResults = baseList
-                .flatMap { item ->
-                    item.restaurant.cuisine.split(",", "/", "&")
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                }
-                .distinct()
-                .sortedWith(String.CASE_INSENSITIVE_ORDER)
+        if (params.mode == SpecialListMode.FAVORITES_ONLY) {
+            list = list.filter { it.isFavorite }
+        } else if (params.mode == SpecialListMode.VISITED_ONLY) {
+            list = list.filter { it.isVisited }
+        }
 
-            // Keep availableCuisines synchronized with the results
-            if (state.availableCuisines != cuisinesForResults) {
-                val selectedStillValid = state.selectedCuisine != null &&
-                        cuisinesForResults.any { it.equals(state.selectedCuisine, ignoreCase = true) }
-                viewModelScope.launch(Dispatchers.Main.immediate) {
-                    _uiState.value = _uiState.value.copy(
-                        availableCuisines = cuisinesForResults,
-                        selectedCuisine = if (selectedStillValid) state.selectedCuisine else null
-                    )
-                }
-            }
+        if (params.awards.isNotEmpty()) {
+            val matches = params.awards.map { it.dbMatch }
+            list = list.filter { r -> matches.any { r.award.contains(it, ignoreCase = true) } }
+        }
 
-            // Finally, filter by cuisine if selected
-            if (!state.selectedCuisine.isNullOrBlank()) {
-                val selected = state.selectedCuisine.trim().lowercase()
-                baseList.filter { r ->
-                    r.restaurant.cuisine.lowercase().contains(selected)
-                }
-            } else {
-                baseList
+        if (params.query.isNotBlank() && params.query.length >= 2) {
+            val q = params.query.lowercase().trim()
+            list = list.filter {
+                it.name.lowercase().contains(q) ||
+                    it.cuisine.lowercase().contains(q) ||
+                    it.location.lowercase().contains(q) ||
+                    it.address.lowercase().contains(q)
             }
         }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
-    )
+
+        val loc = params.location
+        val withDistance = if (loc != null) {
+            list.mapNotNull { r ->
+                val distance = LocationHelper.calculateDistanceKm(
+                    loc.latitude, loc.longitude, r.latitude, r.longitude
+                )
+                if (params.mode != SpecialListMode.ALL || distance <= LocationHelper.MAX_RADIUS_KM) {
+                    RestaurantWithDistance(r, distance)
+                } else null
+            }.sortedBy { it.distanceKm }
+        } else {
+            list.map { RestaurantWithDistance(it, null) }
+        }
+
+        val cuisines = withDistance
+            .flatMap { it.restaurant.cuisine.split(",", "/", "&") }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+
+        val finalItems = if (!params.cuisine.isNullOrBlank()) {
+            val selected = params.cuisine.trim().lowercase()
+            withDistance.filter { it.restaurant.cuisine.lowercase().contains(selected) }
+        } else {
+            withDistance
+        }
+
+        return FilteredResult(finalItems, cuisines)
+    }
+
+    private val filteredResult: StateFlow<FilteredResult> = filterParams
+        .flatMapLatest { params ->
+            candidatesFor(params)
+                .map { candidates -> applyFilters(candidates, params) }
+                .flowOn(Dispatchers.Default)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), FilteredResult(emptyList(), emptyList()))
+
+    val filteredRestaurants: StateFlow<List<RestaurantWithDistance>> = filteredResult
+        .map { it.items }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val availableCuisines: StateFlow<List<String>> = filteredResult
+        .map { it.availableCuisines }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val selectedRestaurant: StateFlow<RestaurantEntity?> = _uiState
+        .map { it.selectedRestaurantId }
+        .distinctUntilChanged()
+        .flatMapLatest { id ->
+            if (id == null) flowOf(null) else repository.getRestaurantById(id)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun ensureRestaurantImageDownloaded(restaurant: RestaurantListItem) {
+        if (restaurant.imageUrl?.isNotBlank() == true) return
+        val now = System.currentTimeMillis()
+        val retryAt = imageRetryAfter[restaurant.id] ?: 0L
+        if (now < retryAt) return
+
+        viewModelScope.launch {
+            imageDownloadSemaphore.withPermit {
+                if (restaurant.imageUrl?.isNotBlank() == true) return@withPermit
+                try {
+                    withContext(Dispatchers.IO) {
+                        val current = repository.getRestaurantById(restaurant.id).first() ?: return@withContext
+                        repository.fetchRestaurantDetails(current)
+                    }
+                    imageRetryAfter.remove(restaurant.id)
+                } catch (e: Exception) {
+                    imageRetryAfter[restaurant.id] = System.currentTimeMillis() + 10 * 60 * 1000L
+                    android.util.Log.w("FoodieViewModel", "Image metadata fetch failed for ${restaurant.name}: ${e.message}")
+                }
+            }
+        }
+    }
 
     fun onSearchQueryChanged(query: String) {
         // Keep the current restaurant list intact while the user is typing.
@@ -433,47 +473,32 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         saveCurrentState()
     }
 
-    fun openRestaurantDetails(restaurant: RestaurantEntity) {
-        _uiState.value = _uiState.value.copy(selectedRestaurantForDetails = restaurant)
-        // Trigger background scrape for fresh opening hours and downloaded image if needed
-        viewModelScope.launch {
-            val updated = repository.fetchRestaurantDetails(restaurant)
-            if (_uiState.value.selectedRestaurantForDetails?.id == restaurant.id) {
-                _uiState.value = _uiState.value.copy(selectedRestaurantForDetails = updated)
-            }
+    fun openRestaurantDetails(restaurant: RestaurantListItem) {
+        _uiState.value = _uiState.value.copy(selectedRestaurantId = restaurant.id)
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.getRestaurantById(restaurant.id).first() ?: return@launch
+            repository.fetchRestaurantDetails(current)
         }
     }
 
     fun closeRestaurantDetails() {
-        _uiState.value = _uiState.value.copy(selectedRestaurantForDetails = null)
+        _uiState.value = _uiState.value.copy(selectedRestaurantId = null)
+    }
+
+    fun toggleFavorite(restaurant: RestaurantListItem) {
+        viewModelScope.launch { repository.toggleFavorite(restaurant.id) }
     }
 
     fun toggleFavorite(restaurant: RestaurantEntity) {
-        viewModelScope.launch {
-            repository.toggleFavorite(restaurant)
-            // If details is currently open for this restaurant, update it
-            if (_uiState.value.selectedRestaurantForDetails?.id == restaurant.id) {
-                _uiState.value = _uiState.value.copy(
-                    selectedRestaurantForDetails = restaurant.copy(
-                        isFavorite = !restaurant.isFavorite
-                    )
-                )
-            }
-        }
+        viewModelScope.launch { repository.toggleFavorite(restaurant.id) }
+    }
+
+    fun toggleVisited(restaurant: RestaurantListItem, notes: String = "") {
+        viewModelScope.launch { repository.toggleVisited(restaurant.id, notes) }
     }
 
     fun toggleVisited(restaurant: RestaurantEntity, notes: String = "") {
-        viewModelScope.launch {
-            repository.toggleVisited(restaurant, notes)
-            if (_uiState.value.selectedRestaurantForDetails?.id == restaurant.id) {
-                _uiState.value = _uiState.value.copy(
-                    selectedRestaurantForDetails = restaurant.copy(
-                        isVisited = !restaurant.isVisited,
-                        visitedNotes = notes
-                    )
-                )
-            }
-        }
+        viewModelScope.launch { repository.toggleVisited(restaurant.id, notes) }
     }
 
     fun showBackupDialog(show: Boolean) {

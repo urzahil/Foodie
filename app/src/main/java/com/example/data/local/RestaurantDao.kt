@@ -26,6 +26,12 @@ data class RestaurantListItem(
     val isVisited: Boolean
 )
 
+data class CityLocationRow(
+    val location: String,
+    val latitude: Double,
+    val longitude: Double
+)
+
 data class ImportedUserState(
     val sourceKey: String,
     val isFavorite: Boolean,
@@ -133,6 +139,15 @@ interface RestaurantDao {
 
     @Query("SELECT * FROM restaurants WHERE isVisited = 1 ORDER BY visitedTimestamp DESC")
     fun getVisited(): Flow<List<RestaurantEntity>>
+
+    @Query("""
+        SELECT location, AVG(latitude) AS latitude, AVG(longitude) AS longitude
+        FROM restaurants
+        WHERE location != ''
+        GROUP BY location
+        ORDER BY location ASC
+    """)
+    suspend fun getCityLocations(): List<CityLocationRow>
 
     @Query("SELECT DISTINCT location FROM restaurants WHERE location != '' ORDER BY location ASC")
     suspend fun getUniqueLocations(): List<String>

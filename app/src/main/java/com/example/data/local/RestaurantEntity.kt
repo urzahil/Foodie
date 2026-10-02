@@ -45,5 +45,7 @@ data class RestaurantEntity(
     val favoriteTimestamp: Long = 0L,
     val isVisited: Boolean = false,
     val visitedTimestamp: Long = 0L,
-    val visitedNotes: String = ""
+    val visitedNotes: String = "",
+    /** Monotonic token used by catalogue sync to reconcile rows without touching user state. */
+    val catalogueLastSeen: Long = 0L
 )

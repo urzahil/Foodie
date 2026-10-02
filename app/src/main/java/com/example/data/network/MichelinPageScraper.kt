@@ -8,8 +8,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
@@ -35,19 +33,8 @@ class MichelinPageScraper(
         .followRedirects(true)
         .build()
 
-    private val imagesDir: File by lazy {
-        val dir = File(context.filesDir, "michelin_images")
-        if (!dir.exists()) dir.mkdirs()
-        dir
-    }
-
-    fun isImageExpired(restaurant: RestaurantEntity): Boolean {
-        if (restaurant.localImagePath == null) return true
-        val file = File(restaurant.localImagePath)
-        if (!file.exists() || file.length() == 0L) return true
-        val age = System.currentTimeMillis() - restaurant.imageLastDownloaded
-        return age > ONE_MONTH_MS
-    }
+    fun isImageExpired(restaurant: RestaurantEntity): Boolean =
+        restaurant.imageUrl.isNullOrBlank()
 
     suspend fun fetchAndStoreDetails(restaurant: RestaurantEntity): RestaurantEntity =
         withContext(Dispatchers.IO) {
@@ -154,16 +141,10 @@ class MichelinPageScraper(
             val finalHours = extractedHours?.takeIf { it.isNotBlank() }
             val hoursFetched = !finalHours.isNullOrBlank()
 
-            var localPath: String? = restaurant.localImagePath
-            var imageDownloaded = false
-            if (imageExpired && !finalImageUrl.isNullOrBlank()) {
-                try {
-                    localPath = downloadImageToFile(restaurant.id, finalImageUrl)
-                    imageDownloaded = true
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed downloading image for ${restaurant.name}: ${e.message}")
-                }
-            }
+            // Image bytes are no longer downloaded into app-private files here.
+            // Coil owns the disk cache. This request only discovers/stores the canonical image URL.
+            val localPath = restaurant.localImagePath
+            val imageDownloaded = false
 
             val timestamp = System.currentTimeMillis()
             val storedImageTimestamp = if (imageDownloaded) timestamp else restaurant.imageLastDownloaded
@@ -303,21 +284,3 @@ class MichelinPageScraper(
             .replace("&nbsp;", " ")
             .trim()
     }
-
-    private fun downloadImageToFile(restaurantId: Long, imageUrl: String): String {
-        val targetFile = File(imagesDir, "restaurant_$restaurantId.jpg")
-        val req = Request.Builder()
-            .url(imageUrl)
-            .header("User-Agent", "Mozilla/5.0")
-            .build()
-
-        client.newCall(req).execute().use { response ->
-            if (!response.isSuccessful) throw Exception("Image download HTTP ${response.code}")
-            val body = response.body ?: throw Exception("Empty image body")
-            FileOutputStream(targetFile).use { fos ->
-                body.byteStream().copyTo(fos)
-            }
-        }
-        return targetFile.absolutePath
-    }
-}

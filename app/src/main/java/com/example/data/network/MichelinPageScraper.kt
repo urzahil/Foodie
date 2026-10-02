@@ -84,7 +84,7 @@ internal fun parseOpeningHours(html: String): String? {
 
             if (result.isEmpty()) return null
 
-            return allDays.joinToString("\\n") { day ->
+            return allDays.joinToString("\n") { day ->
                 val unique = result[day].orEmpty().distinct()
                 "$day: " + if (unique.isEmpty()) "Closed" else unique.joinToString(", ")
             }

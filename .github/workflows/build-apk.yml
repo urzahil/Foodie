@@ -33,7 +33,19 @@ jobs:
         env:
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: |
+          test -n "$MAPS_API_KEY" || { echo "MAPS_API_KEY secret is not configured"; exit 1; }
           gradle assembleDebug
+
+      - name: Verify Maps API key was packaged
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: |
+          MANIFEST="app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml"
+          test -f "$MANIFEST" || { echo "Merged manifest not found: $MANIFEST"; exit 1; }
+          grep -q 'com.google.android.geo.API_KEY' "$MANIFEST" || { echo "Maps API key metadata is missing"; exit 1; }
+          grep -q 'android:value="AIza' "$MANIFEST" || { echo "Merged manifest does not contain an injected Google API key"; exit 1; }
+          grep -q 'android:value="DEFAULT_API_KEY"' "$MANIFEST" && { echo "Fallback DEFAULT_API_KEY was packaged"; exit 1; }
+          echo "Maps API key is present in the merged manifest (value intentionally not printed)."
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

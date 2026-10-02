@@ -6,11 +6,48 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
+// Lightweight projection used by the list/map screens; intentionally excludes long detail fields.
+
+@Dao
+data class RestaurantListItem(
+    val id: Long,
+    val sourceKey: String,
+    val name: String,
+    val address: String,
+    val location: String,
+    val price: String,
+    val cuisine: String,
+    val longitude: Double,
+    val latitude: Double,
+    val award: String,
+    val greenStar: Boolean,
+    val imageUrl: String?,
+    val isFavorite: Boolean,
+    val isVisited: Boolean
+)
+
 @Dao
 interface RestaurantDao {
 
-    @Query("SELECT * FROM restaurants ORDER BY name ASC")
-    fun getAllRestaurants(): Flow<List<RestaurantEntity>>
+    @Query("""
+        SELECT id, sourceKey, name, address, location, price, cuisine,
+               longitude, latitude, award, greenStar, imageUrl, isFavorite, isVisited
+        FROM restaurants
+        ORDER BY name ASC
+    """)
+    fun getAllListItems(): Flow<List<RestaurantListItem>>
+
+    @Query("""
+        SELECT id, sourceKey, name, address, location, price, cuisine,
+               longitude, latitude, award, greenStar, imageUrl, isFavorite, isVisited
+        FROM restaurants
+        WHERE latitude BETWEEN :minLat AND :maxLat
+          AND longitude BETWEEN :minLng AND :maxLng
+        ORDER BY name ASC
+    """)
+    fun observeInBox(
+        minLat: Double, maxLat: Double, minLng: Double, maxLng: Double
+    ): Flow<List<RestaurantListItem>>
 
     @Query("SELECT * FROM restaurants")
     suspend fun getAllDirect(): List<RestaurantEntity>
@@ -30,8 +67,20 @@ interface RestaurantDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(restaurant: RestaurantEntity): Long
 
+    @Query("UPDATE restaurants SET isFavorite = NOT isFavorite, favoriteTimestamp = CASE WHEN isFavorite = 0 THEN :timestamp ELSE 0 END WHERE id = :id")
+    suspend fun toggleFavorite(id: Long, timestamp: Long)
+
     @Query("UPDATE restaurants SET isFavorite = :isFav, favoriteTimestamp = :timestamp WHERE id = :id")
     suspend fun updateFavorite(id: Long, isFav: Boolean, timestamp: Long)
+
+    @Query("""
+        UPDATE restaurants
+        SET isVisited = NOT isVisited,
+            visitedTimestamp = CASE WHEN isVisited = 0 THEN :timestamp ELSE 0 END,
+            visitedNotes = CASE WHEN isVisited = 0 THEN :notes ELSE '' END
+        WHERE id = :id
+    """)
+    suspend fun toggleVisited(id: Long, timestamp: Long, notes: String)
 
     @Query("UPDATE restaurants SET isVisited = :isVisited, visitedTimestamp = :timestamp, visitedNotes = :notes WHERE id = :id")
     suspend fun updateVisited(id: Long, isVisited: Boolean, timestamp: Long, notes: String)
@@ -81,6 +130,55 @@ interface RestaurantDao {
 
     @Query("UPDATE restaurants SET isFavorite = 0, favoriteTimestamp = 0, isVisited = 0, visitedTimestamp = 0, visitedNotes = ''")
     suspend fun clearAllFavoritesAndVisited()
+
+    @Query("""
+        INSERT INTO restaurants (
+            sourceKey, name, address, location, price, cuisine, longitude, latitude,
+            phoneNumber, url, websiteUrl, award, greenStar, facilitiesAndServices,
+            description, catalogueLastSeen
+        ) VALUES (
+            :sourceKey, :name, :address, :location, :price, :cuisine, :longitude, :latitude,
+            :phoneNumber, :url, :websiteUrl, :award, :greenStar, :facilitiesAndServices,
+            :description, :syncToken
+        )
+        ON CONFLICT(sourceKey) DO UPDATE SET
+            name = excluded.name,
+            address = excluded.address,
+            location = excluded.location,
+            price = excluded.price,
+            cuisine = excluded.cuisine,
+            longitude = excluded.longitude,
+            latitude = excluded.latitude,
+            phoneNumber = excluded.phoneNumber,
+            url = excluded.url,
+            websiteUrl = excluded.websiteUrl,
+            award = excluded.award,
+            greenStar = excluded.greenStar,
+            facilitiesAndServices = excluded.facilitiesAndServices,
+            description = excluded.description,
+            catalogueLastSeen = excluded.catalogueLastSeen
+    """)
+    suspend fun upsertCatalogue(
+        sourceKey: String, name: String, address: String, location: String, price: String,
+        cuisine: String, longitude: Double, latitude: Double, phoneNumber: String, url: String,
+        websiteUrl: String, award: String, greenStar: Boolean, facilitiesAndServices: String,
+        description: String, syncToken: Long
+    )
+
+    @Query("DELETE FROM restaurants WHERE catalogueLastSeen != :syncToken")
+    suspend fun deleteStaleCatalogueRows(syncToken: Long)
+
+    @Transaction
+    suspend fun applyCatalogue(restaurants: List<RestaurantEntity>, syncToken: Long) {
+        restaurants.forEach { r ->
+            upsertCatalogue(
+                r.sourceKey, r.name, r.address, r.location, r.price, r.cuisine,
+                r.longitude, r.latitude, r.phoneNumber, r.url, r.websiteUrl, r.award,
+                r.greenStar, r.facilitiesAndServices, r.description, syncToken
+            )
+        }
+        deleteStaleCatalogueRows(syncToken)
+    }
 
     @Query("DELETE FROM restaurants")
     suspend fun deleteAll()

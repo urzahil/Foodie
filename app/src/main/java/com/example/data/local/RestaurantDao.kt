@@ -4,11 +4,11 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 // Lightweight projection used by the list/map screens; intentionally excludes long detail fields.
 
-@Dao
 data class RestaurantListItem(
     val id: Long,
     val sourceKey: String,

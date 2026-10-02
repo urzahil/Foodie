@@ -71,7 +71,7 @@ internal fun parseOpeningHours(html: String): String? {
             ).matcher(html)
             while (ld.find()) {
                 val raw = ld.group(1)
-                val values = Regex("\\"([^\\"]+)\\"").findAll(raw)
+                val values = Regex("""["\']([^"\']+)["\']""").findAll(raw)
                     .map { it.groupValues[1] }
                     .toList()
                 for (value in values) {

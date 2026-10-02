@@ -43,6 +43,9 @@ data class RestaurantWithDistance(
 )
 
 data class UiState(
+    /** Search text currently being edited; does not affect the restaurant list until submitted. */
+    val searchInputQuery: String = "",
+    /** Last search text that was actually submitted. */
     val searchQuery: String = "",
     val activeLocation: LocationTarget? = null,
     val mapRecenterTrigger: Long = 0L,
@@ -148,6 +151,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         _uiState.value = _uiState.value.copy(
+            searchInputQuery = "",
             searchQuery = lastQuery,
             activeLocation = targetLoc,
             selectedTabIndex = lastTab
@@ -263,19 +267,25 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
     )
 
     fun onSearchQueryChanged(query: String) {
-        _uiState.value = _uiState.value.copy(searchQuery = query,
-            listResetTrigger = _uiState.value.listResetTrigger + 1)
+        // Keep the current restaurant list intact while the user is typing.
+        _uiState.value = _uiState.value.copy(
+            searchInputQuery = query
+        )
         autocompleteJob?.cancel()
 
         if (query.trim().length >= 2) {
             _uiState.value = _uiState.value.copy(isSearchingAutocomplete = true)
             autocompleteJob = viewModelScope.launch {
-                delay(250) // Debounce
+                delay(250)
                 val results = repository.searchAutocomplete(query)
-                _uiState.value = _uiState.value.copy(
-                    autocompleteSuggestions = results,
-                    isSearchingAutocomplete = false
-                )
+                // Ignore stale autocomplete results if the user has already changed
+                // the text again.
+                if (_uiState.value.searchInputQuery == query) {
+                    _uiState.value = _uiState.value.copy(
+                        autocompleteSuggestions = results,
+                        isSearchingAutocomplete = false
+                    )
+                }
             }
         } else {
             _uiState.value = _uiState.value.copy(
@@ -283,20 +293,47 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
                 isSearchingAutocomplete = false
             )
         }
+    }
+
+    fun submitSearch() {
+        val query = _uiState.value.searchInputQuery.trim()
+        val suggestions = _uiState.value.autocompleteSuggestions
+
+        if (suggestions.isNotEmpty()) {
+            onAutocompleteSelected(suggestions.first())
+            return
+        }
+
+        // No location suggestion: commit the typed text as the restaurant search.
+        _uiState.value = _uiState.value.copy(
+            searchQuery = query,
+            searchInputQuery = query,
+            autocompleteSuggestions = emptyList(),
+            isSearchingAutocomplete = false,
+            listResetTrigger = _uiState.value.listResetTrigger + 1
+        )
         saveCurrentState()
+    }
+
+    fun cancelSearch() {
+        // Discard the unsubmitted text and leave the currently displayed restaurants
+        // exactly as they are.
+        autocompleteJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            searchInputQuery = "",
+            autocompleteSuggestions = emptyList(),
+            isSearchingAutocomplete = false
+        )
     }
 
     /**
      * Requirement: When clicking on the search tab/field, clear old text automatically.
      */
     fun onSearchFieldClicked() {
-        if (_uiState.value.searchQuery.isNotEmpty()) {
-            _uiState.value = _uiState.value.copy(
-                searchQuery = "",
-                autocompleteSuggestions = emptyList(),
-                listResetTrigger = _uiState.value.listResetTrigger + 1
-            )
-            saveCurrentState()
+        // Starting a new search clears only the editable draft. The executed
+        // search and its restaurant list remain until the new search is submitted.
+        if (_uiState.value.searchInputQuery.isNotEmpty()) {
+            cancelSearch()
         }
     }
 
@@ -316,6 +353,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
             mapRecenterTrigger = System.currentTimeMillis(),
             listResetTrigger = _uiState.value.listResetTrigger + 1,
             searchQuery = "",
+            searchInputQuery = "",
             autocompleteSuggestions = emptyList(),
             isSearchingAutocomplete = false
         )

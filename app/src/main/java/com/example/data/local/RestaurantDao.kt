@@ -26,6 +26,15 @@ data class RestaurantListItem(
     val isVisited: Boolean
 )
 
+data class ImportedUserState(
+    val sourceKey: String,
+    val isFavorite: Boolean,
+    val favoriteTimestamp: Long,
+    val isVisited: Boolean,
+    val visitedTimestamp: Long,
+    val visitedNotes: String
+)
+
 @Dao
 interface RestaurantDao {
 
@@ -69,6 +78,12 @@ interface RestaurantDao {
 
     @Query("UPDATE restaurants SET isFavorite = NOT isFavorite, favoriteTimestamp = CASE WHEN isFavorite = 0 THEN :timestamp ELSE 0 END WHERE id = :id")
     suspend fun toggleFavorite(id: Long, timestamp: Long)
+
+    @Query("UPDATE restaurants SET isFavorite = :isFav, favoriteTimestamp = :timestamp WHERE sourceKey = :sourceKey")
+    suspend fun updateFavoriteBySourceKey(sourceKey: String, isFav: Boolean, timestamp: Long)
+
+    @Query("UPDATE restaurants SET isVisited = :isVisited, visitedTimestamp = :timestamp, visitedNotes = :notes WHERE sourceKey = :sourceKey")
+    suspend fun updateVisitedBySourceKey(sourceKey: String, isVisited: Boolean, timestamp: Long, notes: String)
 
     @Query("UPDATE restaurants SET isFavorite = :isFav, favoriteTimestamp = :timestamp WHERE id = :id")
     suspend fun updateFavorite(id: Long, isFav: Boolean, timestamp: Long)
@@ -178,6 +193,21 @@ interface RestaurantDao {
             )
         }
         deleteStaleCatalogueRows(syncToken)
+    }
+
+    @Transaction
+    suspend fun restoreUserState(states: List<ImportedUserState>) {
+        clearAllFavoritesAndVisited()
+        states.forEach { state ->
+            if (state.isFavorite) {
+                updateFavoriteBySourceKey(state.sourceKey, true, state.favoriteTimestamp)
+            }
+            if (state.isVisited) {
+                updateVisitedBySourceKey(
+                    state.sourceKey, true, state.visitedTimestamp, state.visitedNotes
+                )
+            }
+        }
     }
 
     @Query("DELETE FROM restaurants")

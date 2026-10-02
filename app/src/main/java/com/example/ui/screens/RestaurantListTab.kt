@@ -73,7 +73,7 @@ fun RestaurantListTab(
     onSelectCity: (String, Double, Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
 
     // Preserve scroll position across tab switches and back navigation
     val listState = rememberLazyListState(

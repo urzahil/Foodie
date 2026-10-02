@@ -90,7 +90,6 @@ import com.example.ui.theme.MichelinGold
 import com.example.ui.theme.MichelinRed
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-import java.io.File
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -110,14 +109,9 @@ fun RestaurantDetailsScreen(
         onBack()
     }
 
-    val imageFile = if (restaurant.localImagePath != null) File(restaurant.localImagePath) else null
-    val hasValidLocalFile = imageFile != null && imageFile.exists() && imageFile.length() > 0L
-
-    val imageSource: Any? = when {
-        hasValidLocalFile -> imageFile!!
-        !restaurant.imageUrl.isNullOrBlank() && !restaurant.imageUrl!!.contains("unsplash.com") -> restaurant.imageUrl!!
-        else -> null
-    }
+    // Coil owns disk caching; avoid File.exists()/length() during composition.
+    val imageSource: Any? = restaurant.imageUrl
+        ?.takeIf { it.isNotBlank() && !it.contains("unsplash.com") }
 
     Scaffold(
         modifier = modifier.fillMaxSize().testTag("restaurant_details_screen"),

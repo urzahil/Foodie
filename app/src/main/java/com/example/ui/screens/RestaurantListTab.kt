@@ -40,7 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.local.RestaurantEntity
+import com.example.data.local.RestaurantListItem
 import com.example.location.LocationTarget
 import com.example.ui.FoodieViewModel
 import com.example.ui.RestaurantWithDistance
@@ -69,7 +69,7 @@ fun RestaurantListTab(
     restaurants: List<RestaurantWithDistance>,
     activeLocation: LocationTarget?,
     viewModel: FoodieViewModel,
-    onRestaurantClick: (RestaurantEntity) -> Unit,
+    onRestaurantClick: (RestaurantListItem) -> Unit,
     onSelectCity: (String, Double, Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -92,12 +92,7 @@ fun RestaurantListTab(
         viewModel.preservedListOffset = listState.firstVisibleItemScrollOffset
     }
 
-    // Proactively download images as restaurants are listed
-    LaunchedEffect(restaurants) {
-        if (restaurants.isNotEmpty()) {
-            viewModel.onRestaurantsListed(restaurants.map { it.restaurant })
-        }
-    }
+
 
     if (restaurants.isEmpty()) {
         EmptyListState(

@@ -391,8 +391,10 @@ fun MainScreen(
 
             // Top Search Bar with Autocomplete & Near Me button
             SearchBarWithNearMe(
-                query = uiState.searchQuery,
+                query = uiState.searchInputQuery,
                 onQueryChanged = { viewModel.onSearchQueryChanged(it) },
+                onSearchSubmitted = { viewModel.submitSearch() },
+                onSearchCancelled = { viewModel.cancelSearch() },
                 onSearchFieldClicked = { viewModel.onSearchFieldClicked() },
                 activeLocation = uiState.activeLocation,
                 suggestions = uiState.autocompleteSuggestions,

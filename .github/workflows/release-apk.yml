@@ -53,7 +53,7 @@ jobs:
       - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Foodie-release-${{ github.ref_name }}
+          name: Foodie-release-validation
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30

@@ -1,0 +1,52 @@
+package com.example.data.local
+
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.PrimaryKey
+
+@Entity(
+    tableName = "restaurants",
+    indices = [
+        Index(value = ["sourceKey"], unique = true),
+        Index(value = ["award"]),
+        Index(value = ["location"]),
+        Index(value = ["isFavorite"]),
+        Index(value = ["isVisited"]),
+        Index(value = ["latitude", "longitude"])
+    ]
+)
+data class RestaurantEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    /**
+     * Stable Michelin identity. The URL is preferred; the fallback is a deterministic
+     * composite key for rows without a URL.
+     */
+    val sourceKey: String,
+    val name: String,
+    val address: String,
+    val location: String,
+    val price: String,
+    val cuisine: String,
+    val longitude: Double,
+    val latitude: Double,
+    val phoneNumber: String,
+    val url: String,
+    val websiteUrl: String,
+    val award: String,
+    val greenStar: Boolean,
+    val facilitiesAndServices: String,
+    val description: String,
+    val openingHours: String = "",
+    val openingHoursLastFetched: Long = 0L,
+    val localImagePath: String? = null,
+    val imageUrl: String? = null,
+    val imageLastDownloaded: Long = 0L,
+    val isFavorite: Boolean = false,
+    val favoriteTimestamp: Long = 0L,
+    val isVisited: Boolean = false,
+    val visitedTimestamp: Long = 0L,
+    val visitedNotes: String = "",
+    /** Monotonic token used by catalogue sync to reconcile rows without touching user state. */
+    val catalogueLastSeen: Long = 0L
+)

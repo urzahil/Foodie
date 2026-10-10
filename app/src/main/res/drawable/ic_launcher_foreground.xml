@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Safe zone 66dp centered at (54, 54) -->
+
+    <!-- Outer Fine Dining Charger Platter Disc -->
+    <path
+        android:fillColor="#1C0908"
+        android:pathData="M54,54m-31,0a31,31 0,1,1 62,0a31,31 0,1,1 -62,0" />
+
+    <!-- Charger Platter Gold Rim -->
+    <path
+        android:pathData="M54,54m-31,0a31,31 0,1,1 62,0a31,31 0,1,1 -62,0"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFD700" />
+
+    <!-- Inner Michelin Red Accent Ring -->
+    <path
+        android:pathData="M54,54m-28.5,0a28.5,28.5 0,1,1 57,0a28.5,28.5 0,1,1 -57,0"
+        android:strokeWidth="0.8"
+        android:strokeColor="#80DA291C" />
+
+    <!-- Cloche Platter Shadow -->
+    <path
+        android:fillColor="#50000000"
+        android:pathData="M54,69m-21,0a21,2.5 0,1,1 42,0a21,2.5 0,1,1 -42,0" />
+
+    <!-- Cloche Dome Body (Michelin Crimson Red) -->
+    <path
+        android:fillColor="#DA291C"
+        android:pathData="M34,66 C34,49 43,41 54,41 C65,41 74,49 74,66 Z" />
+
+    <!-- Cloche Dome Soft Specular Highlight -->
+    <path
+        android:fillColor="#30FFFFFF"
+        android:pathData="M39,64 C39,52 44,44 54,43 C52,43 43,49 40,64 Z" />
+
+    <!-- Cloche Handle -->
+    <path
+        android:pathData="M54,37m-4,0a4,4 0,1,1 8,0a4,4 0,1,1 -8,0"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFD700" />
+    <path
+        android:fillColor="#FFD700"
+        android:pathData="M52.5,39 H55.5 V42 H52.5 Z" />
+
+    <!-- Cloche Platter Base / Gold Rim -->
+    <path
+        android:fillColor="#FFD700"
+        android:pathData="M32.5,65 H75.5 C76.5,65 77,65.7 77,66.5 C77,67.3 76.5,68 75.5,68 H32.5 C31.5,68 31,67.3 31,66.5 C31,65.7 31.5,65 32.5,65 Z" />
+    <path
+        android:fillColor="#FFA000"
+        android:pathData="M37,68 H71 C71.5,68 72,68.4 72,69 C72,69.6 71.5,70 71,70 H37 C36.5,70 36,69.6 36,69 C36,68.4 36.5,68 37,68 Z" />
+
+    <!-- Center Official Michelin Star in Radiant Gold -->
+    <group
+        android:scaleX="0.020"
+        android:scaleY="0.020"
+        android:translateX="44"
+        android:translateY="44">
+        <group
+            android:translateX="42"
+            android:translateY="150">
+            <!-- Drop shadow of star on cloche -->
+            <path
+                android:fillColor="#40000000"
+                android:pathData="M624,99v-49q0,-74 -47,-122t-119,-48q-78,0 -122,49t-44,131v15q0,4 1,7l1,17q-74,-53 -133,-53q-46,0 -88,31q-40,29 -59,76q-14,33 -14,66q0,101 116,154l15,7q-131,60 -131,162q0,69 48,121t114,52q60,0 119,-43l13,-10q-2,20 -2,48q0,75 47,122.5t119,47.5 q79,0 122.5,-49.5t43.5,-129.5v-39q74,53 132,53q65,0 112.5,-52.5t47.5,-120.5q0,-102 -116,-155l-15,-7q131,-60 131,-161q0,-65 -47,-119t-113.5,-54t-117.5,42zM540,268q116,-169 215,-169q41,0 74.5,37t33.5,83q0,124 -268,147v29q133,11 200.5,48t67.5,99 q0,45 -32.5,82.5t-75.5,37.5q-101,0 -215,-170l-26,15q57,116 57,196q0,124 -113,124q-54,0 -84,-33q-29,-35 -29,-88q0,-80 57,-199l-26,-15q-114,170 -215,170q-41,0 -74.5,-35.5t-33.5,-84.5q0,-124 267,-147v-29q-267,-22 -267,-147q0,-44 32,-82t76,-38q99,0 215,169 l26,-14q-57,-117 -57,-200q0,-53 29,-88q30,-33 84,-33q113,0 113,123q0,81 -57,198z" />
+            <!-- Official Michelin Star body in Gold -->
+            <path
+                android:fillColor="#FFD700"
+                android:pathData="M624,69v-49q0,-74 -47,-122t-119,-48q-78,0 -122,49t-44,131v15q0,4 1,7l1,17q-74,-53 -133,-53q-46,0 -88,31q-40,29 -59,76q-14,33 -14,66q0,101 116,154l15,7q-131,60 -131,162q0,69 48,121t114,52q60,0 119,-43l13,-10q-2,20 -2,48q0,75 47,122.5t119,47.5 q79,0 122.5,-49.5t43.5,-129.5v-39q74,53 132,53q65,0 112.5,-52.5t47.5,-120.5q0,-102 -116,-155l-15,-7q131,-60 131,-161q0,-65 -47,-119t-113.5,-54t-117.5,42zM540,238q116,-169 215,-169q41,0 74.5,37t33.5,83q0,124 -268,147v29q133,11 200.5,48t67.5,99 q0,45 -32.5,82.5t-75.5,37.5q-101,0 -215,-170l-26,15q57,116 57,196q0,124 -113,124q-54,0 -84,-33q-29,-35 -29,-88q0,-80 57,-199l-26,-15q-114,170 -215,170q-41,0 -74.5,-35.5t-33.5,-84.5q0,-124 267,-147v-29q-267,-22 -267,-147q0,-44 32,-82t76,-38q99,0 215,169 l26,-14q-57,-117 -57,-200q0,-53 29,-88q30,-33 84,-33q113,0 113,123q0,81 -57,198z" />
+        </group>
+    </group>
+</vector>

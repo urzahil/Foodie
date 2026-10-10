@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Dark luxury background matching app theme (#121212 / #1E1E1E) -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endX="108"
+                android:endY="108"
+                android:startX="0"
+                android:startY="0"
+                android:type="linear">
+                <item
+                    android:color="#240A09"
+                    android:offset="0.0" />
+                <item
+                    android:color="#170908"
+                    android:offset="0.45" />
+                <item
+                    android:color="#0D0D0D"
+                    android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Subtle concentric fine dining ambient rings -->
+    <path
+        android:fillColor="#08FFFFFF"
+        android:pathData="M54,54m-46,0a46,46 0,1,1 92,0a46,46 0,1,1 -92,0" />
+    <path
+        android:fillColor="#12DA291C"
+        android:pathData="M54,54m-38,0a38,38 0,1,1 76,0a38,38 0,1,1 -76,0" />
+</vector>

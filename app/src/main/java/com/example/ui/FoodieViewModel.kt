@@ -73,6 +73,7 @@ data class UiState(
     val listResetTrigger: Long = 0L,
     val selectedFilters: Set<MichelinAwardFilter> = emptySet(),
     val selectedCuisine: String? = null,
+    val showListPhotos: Boolean = true,
     val specialMode: SpecialListMode = SpecialListMode.ALL,
     val selectedTabIndex: Int = 0, // 0 = List, 1 = Map
     val autocompleteSuggestions: List<AutocompleteSuggestion> = emptyList(),
@@ -146,11 +147,14 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
 
+        val showPhotos = prefs.getBoolean("show_list_photos", true)
+
         _uiState.value = _uiState.value.copy(
             searchInputQuery = "",
             searchQuery = lastQuery,
             activeLocation = targetLoc,
-            selectedTabIndex = lastTab
+            selectedTabIndex = lastTab,
+            showListPhotos = showPhotos
         )
     }
 
@@ -516,6 +520,12 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
 
     fun toggleVisited(restaurant: RestaurantEntity, notes: String = "") {
         viewModelScope.launch { repository.toggleVisited(restaurant.id, notes) }
+    }
+
+    fun toggleShowListPhotos() {
+        val newValue = !_uiState.value.showListPhotos
+        _uiState.value = _uiState.value.copy(showListPhotos = newValue)
+        prefs.edit().putBoolean("show_list_photos", newValue).apply()
     }
 
     fun showBackupDialog(show: Boolean) {

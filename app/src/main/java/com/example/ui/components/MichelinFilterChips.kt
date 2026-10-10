@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,8 +37,11 @@ fun MichelinFilterChips(
     onToggleFilter: (MichelinAwardFilter) -> Unit,
     modifier: Modifier = Modifier,
     selectedPriceFilters: Set<PriceFilter> = emptySet(),
-    onTogglePriceFilter: (PriceFilter) -> Unit = {}
+    onTogglePriceFilter: (PriceFilter) -> Unit = {},
+    onClearFilters: () -> Unit = {}
 ) {
+    val hasActiveFilters = selectedFilters.isNotEmpty() || selectedPriceFilters.isNotEmpty()
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -145,7 +149,7 @@ fun MichelinFilterChips(
             }
         }
 
-        // Second Row: Price Filters ($ to $$$$)
+        // Second Row: Price Filters ($ to $$$$) + Dynamic Reset Button
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -165,6 +169,23 @@ fun MichelinFilterChips(
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = if (selected) MichelinRed else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (hasActiveFilters) {
+                MichelinFilterItem(
+                    selected = false,
+                    onClick = onClearFilters,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("filter_clear_all")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "Reset filters",
+                        tint = MichelinRed,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }

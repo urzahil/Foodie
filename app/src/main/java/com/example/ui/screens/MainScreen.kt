@@ -419,12 +419,13 @@ fun MainScreen(
                 }
             )
 
-            // Filter row under search bar: 3 Stars, 2 Stars, 1 Star, Bib Gourmand, Selected + Price ($ to $$$$)
+            // Filter row under search bar: 3 Stars, 2 Stars, 1 Star, Bib Gourmand, Selected + Price ($ to $$$$) + Reset
             MichelinFilterChips(
                 selectedFilters = uiState.selectedFilters,
                 onToggleFilter = { viewModel.toggleFilter(it) },
                 selectedPriceFilters = uiState.selectedPriceFilters,
-                onTogglePriceFilter = { viewModel.togglePriceFilter(it) }
+                onTogglePriceFilter = { viewModel.togglePriceFilter(it) },
+                onClearFilters = { viewModel.clearAwardAndPriceFilters() }
             )
 
             // Cuisine dropdown filter

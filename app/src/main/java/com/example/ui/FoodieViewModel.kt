@@ -530,6 +530,13 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(selectedPriceFilters = current)
     }
 
+    fun clearAwardAndPriceFilters() {
+        _uiState.value = _uiState.value.copy(
+            selectedFilters = emptySet(),
+            selectedPriceFilters = emptySet()
+        )
+    }
+
     fun clearAllFilters() {
         _uiState.value = _uiState.value.copy(
             selectedFilters = emptySet(),

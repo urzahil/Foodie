@@ -55,12 +55,15 @@ fun RestaurantCard(
     onToggleFavorite: () -> Unit,
     onToggleVisited: () -> Unit,
     onEnsureImageDownloaded: () -> Unit = {},
+    showPhoto: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
 
-    LaunchedEffect(restaurant.id, restaurant.imageUrl) {
-        onEnsureImageDownloaded()
+    if (showPhoto) {
+        LaunchedEffect(restaurant.id, restaurant.imageUrl) {
+            onEnsureImageDownloaded()
+        }
     }
 
     val imageSource: Any? = restaurant.imageUrl
@@ -81,127 +84,254 @@ fun RestaurantCard(
             MaterialTheme.colorScheme.outlineVariant
         )
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // Image Header with overlay badges
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-            ) {
-                if (imageSource != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(imageSource)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = restaurant.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
+        if (showPhoto) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Image Header with overlay badges
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                ) {
+                    if (imageSource != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(imageSource)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = restaurant.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.primaryContainer,
+                                            MaterialTheme.colorScheme.surfaceContainer
+                                        )
+                                    )
+                                )
+                        )
+                    }
+
+                    // Dark gradient overlay for text readability
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primaryContainer,
-                                        MaterialTheme.colorScheme.surfaceContainer
-                                    )
+                                Brush.verticalGradient(
+                                    colors = listOf(Color.Transparent, Color(0xCC000000)),
+                                    startY = 60f
                                 )
                             )
                     )
+
+                    // Top row: Award badge on left, quick favorite/visited on right
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AwardBadge(award = restaurant.award, compact = false)
+                            if (restaurant.greenStar) {
+                                GreenStarBadge()
+                            }
+                        }
+
+                        // Action buttons
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color(0x99000000)),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            IconButton(
+                                onClick = onToggleFavorite,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (restaurant.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                    contentDescription = if (restaurant.isFavorite) "Remove from favorites" else "Add to favorites",
+                                    tint = if (restaurant.isFavorite) MichelinRed else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = onToggleVisited,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (restaurant.isVisited) Icons.Filled.CheckCircle else Icons.Outlined.CheckCircleOutline,
+                                    contentDescription = if (restaurant.isVisited) "Visited" else "Mark visited",
+                                    tint = if (restaurant.isVisited) GreenStarColor else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Bottom row inside image: Distance pill if available
+                    if (distanceKm != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(10.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xDD000000))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "${LocationHelper.formatDistance(distanceKm)} away",
+                                color = MichelinGold,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
                 }
 
-                // Dark gradient overlay for text readability
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color(0xCC000000)),
-                                startY = 60f
-                            )
-                        )
-                )
-
-                // Top row: Award badge on left, quick favorite/visited on right
-                Row(
+                // Info Body
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(10.dp),
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = restaurant.name,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    // Cuisine & Price
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = restaurant.cuisine.ifBlank { "Fine Dining" },
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        if (restaurant.price.isNotBlank()) {
+                            Text(
+                                text = "•",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = restaurant.price,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Address / Location
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = if (restaurant.address.isNotBlank()) restaurant.address else restaurant.location,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        } else {
+            // Compact Layout without Photo
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                // Top Row: Badges & Distance on Left, Favorite/Visited on Right
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f, fill = false)
                     ) {
                         AwardBadge(award = restaurant.award, compact = false)
                         if (restaurant.greenStar) {
                             GreenStarBadge()
                         }
+                        if (distanceKm != null) {
+                            Text(
+                                text = "• ${LocationHelper.formatDistance(distanceKm)} away",
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
 
-                    // Action buttons
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color(0x99000000)),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(
                             onClick = onToggleFavorite,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
                                 imageVector = if (restaurant.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                                 contentDescription = if (restaurant.isFavorite) "Remove from favorites" else "Add to favorites",
-                                tint = if (restaurant.isFavorite) MichelinRed else Color.White,
+                                tint = if (restaurant.isFavorite) MichelinRed else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
 
                         IconButton(
                             onClick = onToggleVisited,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
                                 imageVector = if (restaurant.isVisited) Icons.Filled.CheckCircle else Icons.Outlined.CheckCircleOutline,
                                 contentDescription = if (restaurant.isVisited) "Visited" else "Mark visited",
-                                tint = if (restaurant.isVisited) GreenStarColor else Color.White,
+                                tint = if (restaurant.isVisited) GreenStarColor else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
                     }
                 }
 
-                // Bottom row inside image: Distance pill if available
-                if (distanceKm != null) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(10.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xDD000000))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "${LocationHelper.formatDistance(distanceKm)} away",
-                            color = MichelinGold,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
+                Spacer(modifier = Modifier.height(4.dp))
 
-            // Info Body
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
-            ) {
+                // Name
                 Text(
                     text = restaurant.name,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -240,7 +370,7 @@ fun RestaurantCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 // Address / Location
                 Row(verticalAlignment = Alignment.CenterVertically) {

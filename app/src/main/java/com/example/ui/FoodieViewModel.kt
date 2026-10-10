@@ -39,6 +39,13 @@ enum class MichelinAwardFilter(val label: String, val dbMatch: String) {
     SELECTED("Selected", "Selected Restaurants")
 }
 
+enum class PriceFilter(val level: Int, val label: String) {
+    ONE_DOLLAR(1, "$"),
+    TWO_DOLLARS(2, "$$"),
+    THREE_DOLLARS(3, "$$$"),
+    FOUR_DOLLARS(4, "$$$$")
+}
+
 enum class SpecialListMode {
     ALL,
     FAVORITES_ONLY,
@@ -54,6 +61,7 @@ private data class FilterParams(
     val query: String,
     val location: LocationTarget?,
     val awards: Set<MichelinAwardFilter>,
+    val prices: Set<PriceFilter>,
     val cuisine: String?,
     val mode: SpecialListMode
 )
@@ -72,6 +80,7 @@ data class UiState(
     val mapRecenterTrigger: Long = 0L,
     val listResetTrigger: Long = 0L,
     val selectedFilters: Set<MichelinAwardFilter> = emptySet(),
+    val selectedPriceFilters: Set<PriceFilter> = emptySet(),
     val selectedCuisine: String? = null,
     val specialMode: SpecialListMode = SpecialListMode.ALL,
     val selectedTabIndex: Int = 0, // 0 = List, 1 = Map
@@ -174,6 +183,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
                 query = it.searchQuery,
                 location = it.activeLocation,
                 awards = it.selectedFilters,
+                prices = it.selectedPriceFilters,
                 cuisine = it.selectedCuisine,
                 mode = it.specialMode
             )
@@ -182,7 +192,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         .stateIn(
             viewModelScope,
             SharingStarted.Eagerly,
-            FilterParams("", null, emptySet(), null, SpecialListMode.ALL)
+            FilterParams("", null, emptySet(), emptySet(), null, SpecialListMode.ALL)
         )
 
     private fun candidatesFor(params: FilterParams): kotlinx.coroutines.flow.Flow<List<RestaurantListItem>> {
@@ -224,6 +234,10 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         if (params.awards.isNotEmpty()) {
             val matches = params.awards.map { it.dbMatch }
             list = list.filter { r -> matches.any { r.award.contains(it, ignoreCase = true) } }
+        }
+
+        if (params.prices.isNotEmpty()) {
+            list = list.filter { r -> matchesPrice(r.price, params.prices) }
         }
 
         if (params.query.isNotBlank() && params.query.length >= 2) {
@@ -463,6 +477,39 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         saveCurrentState()
     }
 
+    private fun matchesPrice(priceStr: String, selectedPrices: Set<PriceFilter>): Boolean {
+        if (selectedPrices.isEmpty()) return true
+        if (priceStr.isBlank()) return false
+
+        val levels = selectedPrices.map { it.level }.toSet()
+
+        val currencySymbols = setOf('$', '€', '£', '¥', '￥', '₩', '₺', '₹')
+        val symbolCount = priceStr.count { it in currencySymbols }
+        if (symbolCount in 1..4) {
+            return levels.contains(symbolCount)
+        }
+
+        if (priceStr.contains("$$$$") || priceStr.contains("€€€€") || priceStr.contains("££££") || priceStr.contains("¥¥¥¥")) {
+            return levels.contains(4)
+        }
+        if (priceStr.contains("$$$") || priceStr.contains("€€€") || priceStr.contains("£££") || priceStr.contains("¥¥¥")) {
+            return levels.contains(3)
+        }
+        if (priceStr.contains("$$") || priceStr.contains("€€") || priceStr.contains("££") || priceStr.contains("¥¥")) {
+            return levels.contains(2)
+        }
+        if (priceStr.contains("$") || priceStr.contains("€") || priceStr.contains("£") || priceStr.contains("¥")) {
+            return levels.contains(1)
+        }
+
+        val trimmed = priceStr.trim()
+        if (trimmed.length in 1..4 && trimmed.none { it.isDigit() }) {
+            return levels.contains(trimmed.length)
+        }
+
+        return false
+    }
+
     fun toggleFilter(filter: MichelinAwardFilter) {
         val current = _uiState.value.selectedFilters.toMutableSet()
         if (current.contains(filter)) {
@@ -473,8 +520,22 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(selectedFilters = current)
     }
 
+    fun togglePriceFilter(filter: PriceFilter) {
+        val current = _uiState.value.selectedPriceFilters.toMutableSet()
+        if (current.contains(filter)) {
+            current.remove(filter)
+        } else {
+            current.add(filter)
+        }
+        _uiState.value = _uiState.value.copy(selectedPriceFilters = current)
+    }
+
     fun clearAllFilters() {
-        _uiState.value = _uiState.value.copy(selectedFilters = emptySet(), selectedCuisine = null)
+        _uiState.value = _uiState.value.copy(
+            selectedFilters = emptySet(),
+            selectedPriceFilters = emptySet(),
+            selectedCuisine = null
+        )
     }
 
     fun selectCuisine(cuisine: String?) {

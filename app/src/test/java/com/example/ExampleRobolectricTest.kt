@@ -132,4 +132,17 @@ Sunday: 12:00–15:00, 18:30–22:00""",
         assertTrue(!parsed.contains("public holidays"))
     }
 
+    @Test
+    fun `price filter enum level and labels are accurate`() {
+        assertEquals(1, com.example.ui.PriceFilter.ONE_DOLLAR.level)
+        assertEquals("$", com.example.ui.PriceFilter.ONE_DOLLAR.label)
+        assertEquals(2, com.example.ui.PriceFilter.TWO_DOLLARS.level)
+        assertEquals("$$", com.example.ui.PriceFilter.TWO_DOLLARS.label)
+        assertEquals(3, com.example.ui.PriceFilter.THREE_DOLLARS.level)
+        assertEquals("$$$", com.example.ui.PriceFilter.THREE_DOLLARS.label)
+        assertEquals(4, com.example.ui.PriceFilter.FOUR_DOLLARS.level)
+        assertEquals("$$$$", com.example.ui.PriceFilter.FOUR_DOLLARS.label)
+        assertEquals(4, com.example.ui.PriceFilter.entries.size)
+    }
+
 }

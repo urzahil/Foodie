@@ -283,7 +283,7 @@ fun RestaurantCard(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f, fill = false)
                     ) {
-                        AwardBadge(award = restaurant.award, compact = false)
+                        AwardBadge(award = restaurant.award, compact = true)
                         if (restaurant.greenStar) {
                             GreenStarBadge()
                         }

@@ -57,6 +57,7 @@ import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapType
@@ -67,6 +68,17 @@ import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.coroutines.launch
 
 private const val TAG = "RestaurantMapTab"
+
+private const val NO_POI_MAP_STYLE = """
+[
+  {
+    "featureType": "poi",
+    "stylers": [
+      { "visibility": "off" }
+    ]
+  }
+]
+"""
 
 @Composable
 fun RestaurantMapTab(
@@ -145,7 +157,8 @@ fun RestaurantMapTab(
             cameraPositionState = cameraPositionState,
             properties = MapProperties(
                 mapType = MapType.NORMAL,
-                isMyLocationEnabled = false
+                isMyLocationEnabled = true,
+                mapStyleOptions = remember { MapStyleOptions(NO_POI_MAP_STYLE) }
             ),
             uiSettings = MapUiSettings(
                 zoomControlsEnabled = false,

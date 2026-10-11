@@ -1,6 +1,6 @@
 # Foodie
 
-An Android app for discovering Michelin Guide restaurants near you, or anywhere you're travelling, and keeping track of the ones you want to try or have visited.
+An Android app for discovering Michelin Guide restaurants and keeping track of the ones you want to try or have visited.
 
 ## Features
 - Find restaurants within 30 km of your GPS location.

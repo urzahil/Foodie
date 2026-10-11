@@ -15,8 +15,8 @@ android {
         applicationId = "com.aistudio.foodie.michelin"
         minSdk = 24
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.7.2"
+        versionCode = 10
+        versionName = "1.8.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

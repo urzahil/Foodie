@@ -296,7 +296,7 @@ fun MainScreen(
                                 text = {
                                     Column {
                                         Text(
-                                            "Last refresh",
+                                            "Last update",
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             style = MaterialTheme.typography.bodySmall
                                         )

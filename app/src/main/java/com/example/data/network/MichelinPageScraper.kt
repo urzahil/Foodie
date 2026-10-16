@@ -304,12 +304,4 @@ class MichelinPageScraper(
         if (restaurant.openingHoursLastFetched <= 0L) return true
         return System.currentTimeMillis() - restaurant.openingHoursLastFetched > ONE_MONTH_MS
     }
-
-
-    private fun cleanHtmlText(value: String): String {
-        return value
-            .replace(Regex("""\s+"""), " ")
-            .replace("&nbsp;", " ")
-            .trim()
-    }
 }

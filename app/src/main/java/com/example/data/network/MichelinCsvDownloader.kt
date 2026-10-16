@@ -39,6 +39,9 @@ class MichelinCsvDownloader(
         // const val ONE_MONTH_MS = 30L * 24 * 60 * 60 * 1000L
         const val SYNC_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000L
 
+        /** Minimum fraction of the existing row count a new download must reach to be applied. */
+        private const val MIN_CATALOGUE_RATIO = 0.8
+
         fun stableRestaurantKey(
             name: String,
             url: String,
@@ -114,6 +117,7 @@ class MichelinCsvDownloader(
                         32768
                     ).use { reader ->
                         val estimatedTotal = 19_600
+                        var lastReported = 0
                         parseCsv(reader) { row ->
                             if (row.size >= 11) {
                                 val name = row.getOrNull(0)?.trim().orEmpty()
@@ -158,7 +162,8 @@ class MichelinCsvDownloader(
                                 }
                             }
 
-                            if (parsed.size % 500 == 0 && parsed.isNotEmpty()) {
+                            if (parsed.size > lastReported && parsed.size % 500 == 0) {
+                                lastReported = parsed.size
                                 val progress = 0.1f +
                                         (0.65f * (parsed.size.toFloat() / estimatedTotal).coerceAtMost(
                                             1f
@@ -175,6 +180,16 @@ class MichelinCsvDownloader(
                     if (parsed.isEmpty()) {
                         _syncState.value =
                             SyncState.Error("No valid restaurants found in Michelin database")
+                        return@withContext false
+                    }
+
+                    // A truncated or malformed download must not be allowed to prune the
+                    // local catalogue, so refuse a catalogue far smaller than what we hold.
+                    val existingCount = restaurantDao.getCount()
+                    if (existingCount > 0 && parsed.size < existingCount * MIN_CATALOGUE_RATIO) {
+                        _syncState.value = SyncState.Error(
+                            "Downloaded catalogue looks incomplete (${parsed.size} vs $existingCount); keeping existing data"
+                        )
                         return@withContext false
                     }
 

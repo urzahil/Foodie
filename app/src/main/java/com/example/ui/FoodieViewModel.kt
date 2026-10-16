@@ -12,6 +12,7 @@ import com.example.data.repository.AutocompleteSuggestion
 import com.example.data.repository.RestaurantRepository
 import com.example.location.LocationHelper
 import com.example.location.LocationTarget
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -56,7 +57,10 @@ private data class FilterParams(
     val awards: Set<MichelinAwardFilter>,
     val cuisine: String?,
     val mode: SpecialListMode
-)
+) {
+    /** True when the submitted text is long enough to filter restaurants. */
+    val isTextSearch: Boolean get() = query.trim().length >= 2
+}
 
 private data class FilteredResult(
     val items: List<RestaurantWithDistance>,
@@ -88,6 +92,14 @@ data class UiState(
 
 class FoodieViewModel(application: Application) : AndroidViewModel(application) {
 
+    private companion object {
+        const val IMAGE_IN_FLIGHT_MS = 2 * 60 * 1000L
+        const val IMAGE_ERROR_RETRY_MS = 10 * 60 * 1000L
+        const val IMAGE_MISSING_RETRY_MS = 6 * 60 * 60 * 1000L
+        const val DETAILS_RETRY_MS = 60 * 60 * 1000L
+        const val MAX_TEXT_SEARCH_RESULTS = 300
+    }
+
     private val repository: RestaurantRepository =
         (application as FoodieApp).repository
 
@@ -113,6 +125,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
     private var autocompleteJob: Job? = null
     private val imageDownloadSemaphore = Semaphore(3)
     private val imageRetryAfter = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+    private val detailsRetryAfter = java.util.concurrent.ConcurrentHashMap<Long, Long>()
 
     init {
         restoreLastState()
@@ -191,7 +204,8 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun candidatesFor(params: FilterParams): kotlinx.coroutines.flow.Flow<List<RestaurantListItem>> {
         val loc = params.location
-        if (params.mode != SpecialListMode.ALL || loc == null) {
+        // A text search looks beyond the 30 km box so a restaurant can be found by name anywhere.
+        if (params.mode != SpecialListMode.ALL || loc == null || params.isTextSearch) {
             return repository.allRestaurants
         }
 
@@ -230,7 +244,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
             list = list.filter { r -> matches.any { r.award.contains(it, ignoreCase = true) } }
         }
 
-        if (params.query.isNotBlank() && params.query.length >= 2) {
+        if (params.isTextSearch) {
             val q = params.query.lowercase().trim()
             list = list.filter {
                 it.name.lowercase().contains(q) ||
@@ -246,7 +260,9 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
                 val distance = LocationHelper.calculateDistanceKm(
                     loc.latitude, loc.longitude, r.latitude, r.longitude
                 )
-                if (params.mode != SpecialListMode.ALL || distance <= LocationHelper.MAX_RADIUS_KM) {
+                if (params.mode != SpecialListMode.ALL || params.isTextSearch ||
+                    distance <= LocationHelper.MAX_RADIUS_KM
+                ) {
                     RestaurantWithDistance(r, distance)
                 } else null
             }.sortedBy { it.distanceKm }
@@ -268,7 +284,15 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
             withDistance
         }
 
-        return FilteredResult(finalItems, cuisines)
+        // Unbounded-radius text searches can match thousands of rows; keep the nearest ones
+        // so the list and map stay responsive.
+        val capped = if (params.isTextSearch && params.mode == SpecialListMode.ALL) {
+            finalItems.take(MAX_TEXT_SEARCH_RESULTS)
+        } else {
+            finalItems
+        }
+
+        return FilteredResult(capped, cuisines)
     }
 
     private val filteredResult: StateFlow<FilteredResult> = filterParams
@@ -304,19 +328,29 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         val now = System.currentTimeMillis()
         val retryAt = imageRetryAfter[restaurant.id] ?: 0L
         if (now < retryAt) return
+        // Reserve the slot immediately so rapid recompositions don't queue duplicates.
+        imageRetryAfter[restaurant.id] = now + IMAGE_IN_FLIGHT_MS
 
         viewModelScope.launch {
             imageDownloadSemaphore.withPermit {
-                if (restaurant.imageUrl?.isNotBlank() == true) return@withPermit
                 try {
-                    withContext(Dispatchers.IO) {
+                    val updated = withContext(Dispatchers.IO) {
                         val current = repository.getRestaurantById(restaurant.id).first()
-                            ?: return@withContext
+                            ?: return@withContext null
                         repository.fetchRestaurantDetails(current)
                     }
+                    // The scraper swallows network errors, so "no image found" is a normal
+                    // result. Back off so restaurants without a photo are not re-scraped
+                    // every time they scroll into view.
+                    imageRetryAfter[restaurant.id] = System.currentTimeMillis() +
+                            if (updated?.imageUrl.isNullOrBlank()) IMAGE_MISSING_RETRY_MS
+                            else IMAGE_IN_FLIGHT_MS
+                } catch (e: CancellationException) {
                     imageRetryAfter.remove(restaurant.id)
+                    throw e
                 } catch (e: Exception) {
-                    imageRetryAfter[restaurant.id] = System.currentTimeMillis() + 10 * 60 * 1000L
+                    imageRetryAfter[restaurant.id] =
+                        System.currentTimeMillis() + IMAGE_ERROR_RETRY_MS
                     android.util.Log.w(
                         "FoodieViewModel",
                         "Image metadata fetch failed for ${restaurant.name}: ${e.message}"
@@ -359,8 +393,14 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         val query = _uiState.value.searchInputQuery.trim()
         val suggestions = _uiState.value.autocompleteSuggestions
 
-        if (suggestions.isNotEmpty()) {
-            onAutocompleteSelected(suggestions.first())
+        // Jump to a place only when the typed text is clearly a destination (a Michelin
+        // city whose name starts with it). Otherwise treat it as a restaurant search so
+        // names and cuisines can be found even when the geocoder offers suggestions.
+        val destination = suggestions.firstOrNull {
+            it.isCity && it.title.startsWith(query, ignoreCase = true)
+        }
+        if (destination != null) {
+            onAutocompleteSelected(destination)
             return
         }
 
@@ -496,6 +536,9 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
 
     fun openRestaurantDetails(restaurant: RestaurantListItem) {
         _uiState.value = _uiState.value.copy(selectedRestaurantId = restaurant.id)
+        val now = System.currentTimeMillis()
+        if (now < (detailsRetryAfter[restaurant.id] ?: 0L)) return
+        detailsRetryAfter[restaurant.id] = now + DETAILS_RETRY_MS
         viewModelScope.launch(Dispatchers.IO) {
             val current = repository.getRestaurantById(restaurant.id).first() ?: return@launch
             repository.fetchRestaurantDetails(current)
@@ -547,15 +590,18 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
 
     fun importBackup(jsonString: String) {
         viewModelScope.launch {
-            val count = repository.importFavoritesAndVisitedJson(jsonString)
-            if (count >= 0) {
+            val result = repository.importFavoritesAndVisitedJson(jsonString)
+            if (result != null) {
+                val skippedNote = if (result.skipped > 0) {
+                    " (${result.skipped} no longer in the catalogue were skipped)"
+                } else ""
                 _uiState.value = _uiState.value.copy(
                     showBackupDialog = false,
-                    toastMessage = "Successfully imported $count restaurant bookmarks!"
+                    toastMessage = "Imported ${result.restored} restaurant bookmarks$skippedNote"
                 )
             } else {
                 _uiState.value = _uiState.value.copy(
-                    toastMessage = "Failed to import JSON: Invalid format"
+                    toastMessage = "Import failed: not a valid Foodie backup, or none of its restaurants were found"
                 )
             }
         }

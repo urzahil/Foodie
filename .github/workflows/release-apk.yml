@@ -1,9 +1,6 @@
 name: Build Foodie Release APK
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 permissions:

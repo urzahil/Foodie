@@ -1,8 +1,6 @@
 package com.example.data.local
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
@@ -74,17 +72,8 @@ interface RestaurantDao {
     @Query("SELECT * FROM restaurants WHERE id = :id LIMIT 1")
     fun getRestaurantById(id: Long): Flow<RestaurantEntity?>
 
-    @Query("SELECT * FROM restaurants WHERE id = :id LIMIT 1")
-    suspend fun getRestaurantByIdDirect(id: Long): RestaurantEntity?
-
     @Query("SELECT COUNT(*) FROM restaurants")
     suspend fun getCount(): Int
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(restaurants: List<RestaurantEntity>)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(restaurant: RestaurantEntity): Long
 
     @Query("UPDATE restaurants SET isFavorite = NOT isFavorite, favoriteTimestamp = CASE WHEN isFavorite = 0 THEN :timestamp ELSE 0 END WHERE id = :id")
     suspend fun toggleFavorite(id: Long, timestamp: Long)
@@ -100,9 +89,6 @@ interface RestaurantDao {
         notes: String
     )
 
-    @Query("UPDATE restaurants SET isFavorite = :isFav, favoriteTimestamp = :timestamp WHERE id = :id")
-    suspend fun updateFavorite(id: Long, isFav: Boolean, timestamp: Long)
-
     @Query(
         """
         UPDATE restaurants
@@ -113,9 +99,6 @@ interface RestaurantDao {
     """
     )
     suspend fun toggleVisited(id: Long, timestamp: Long, notes: String)
-
-    @Query("UPDATE restaurants SET isVisited = :isVisited, visitedTimestamp = :timestamp, visitedNotes = :notes WHERE id = :id")
-    suspend fun updateVisited(id: Long, isVisited: Boolean, timestamp: Long, notes: String)
 
     @Query(
         """
@@ -164,15 +147,6 @@ interface RestaurantDao {
     )
     suspend fun getCityLocations(): List<CityLocationRow>
 
-    @Query("SELECT DISTINCT location FROM restaurants WHERE location != '' ORDER BY location ASC")
-    suspend fun getUniqueLocations(): List<String>
-
-    @Query("SELECT DISTINCT cuisine FROM restaurants WHERE cuisine != '' ORDER BY cuisine ASC")
-    suspend fun getUniqueCuisines(): List<String>
-
-    @Query("SELECT DISTINCT cuisine FROM restaurants WHERE cuisine != '' ORDER BY cuisine ASC")
-    fun getUniqueCuisinesFlow(): Flow<List<String>>
-
     @Query("UPDATE restaurants SET isFavorite = 0, favoriteTimestamp = 0, isVisited = 0, visitedTimestamp = 0, visitedNotes = ''")
     suspend fun clearAllFavoritesAndVisited()
 
@@ -214,7 +188,16 @@ interface RestaurantDao {
         description: String, syncToken: Long
     )
 
-    @Query("DELETE FROM restaurants WHERE catalogueLastSeen != :syncToken")
+    /**
+     * Removes catalogue rows that disappeared upstream. Rows the user has favourited or
+     * visited are kept so a catalogue change can never destroy their data.
+     */
+    @Query(
+        """
+        DELETE FROM restaurants
+        WHERE catalogueLastSeen != :syncToken AND isFavorite = 0 AND isVisited = 0
+    """
+    )
     suspend fun deleteStaleCatalogueRows(syncToken: Long)
 
     @Transaction
@@ -243,7 +226,4 @@ interface RestaurantDao {
             }
         }
     }
-
-    @Query("DELETE FROM restaurants")
-    suspend fun deleteAll()
 }

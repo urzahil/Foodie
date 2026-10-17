@@ -1,10 +1,7 @@
-import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
-    alias(libs.plugins.google.services)
 }
 
 android {
@@ -16,7 +13,7 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 11
-        versionName = "1.9.2"
+        versionName = "1.11.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -41,7 +38,8 @@ android {
     buildTypes {
         release {
             isCrunchPngs = false
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -66,11 +64,9 @@ android {
 }
 
 
-googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
-    implementation(platform(libs.firebase.bom))
     // implementation(libs.accompanist.permissions)
     implementation(libs.androidx.activity.compose)
     // implementation(libs.androidx.camera.camera2)
@@ -129,4 +125,15 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     "ksp"(libs.androidx.room.compiler)
     // "ksp"(libs.moshi.kotlin.codegen)
+}
+
+// A release build without a real Maps key would ship a blank map, so fail it early.
+// Debug builds keep the placeholder key.
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    val mapsKey = providers.environmentVariable("MAPS_API_KEY").orElse("")
+    doFirst {
+        check(mapsKey.get().isNotBlank()) {
+            "MAPS_API_KEY environment variable must be set for release builds"
+        }
+    }
 }

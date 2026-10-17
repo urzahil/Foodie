@@ -1,19 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Backup and device-transfer rules for Android 12+. Favourites and visits live in the Room
+   database, so it is included together with the small UI preference files. The image cache
+   is not backed up.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <include domain="database" path="." />
+        <include domain="sharedpref" path="foodie_prefs.xml" />
+        <include domain="sharedpref" path="foodie_ui_state.xml" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <include domain="database" path="." />
+        <include domain="sharedpref" path="foodie_prefs.xml" />
+        <include domain="sharedpref" path="foodie_ui_state.xml" />
     </device-transfer>
-    -->
 </data-extraction-rules>

@@ -14,10 +14,11 @@ import com.example.location.LocationTarget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+
+data class ImportResult(val restored: Int, val skipped: Int)
 
 data class AutocompleteSuggestion(
     val title: String,
@@ -52,16 +53,6 @@ class RestaurantRepository(
     ): Flow<List<RestaurantListItem>> =
         dao.observeInBox(minLat, maxLat, minLng, maxLng)
 
-    val favorites: Flow<List<RestaurantEntity>> = dao.getFavorites()
-    val visited: Flow<List<RestaurantEntity>> = dao.getVisited()
-
-    val uniqueCuisines: Flow<List<String>> = dao.getUniqueCuisinesFlow().map { list ->
-        list.flatMap { entry ->
-            entry.split(",", "/", "&")
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-        }.distinct().sorted()
-    }
 
     // In-memory cache of city centroids from Michelin database
     @Volatile
@@ -136,15 +127,6 @@ class RestaurantRepository(
 
     fun getRestaurantById(id: Long): Flow<RestaurantEntity?> = dao.getRestaurantById(id)
 
-    suspend fun toggleFavorite(restaurant: RestaurantEntity) = withContext(Dispatchers.IO) {
-        dao.toggleFavorite(restaurant.id, System.currentTimeMillis())
-    }
-
-    suspend fun toggleVisited(restaurant: RestaurantEntity, notes: String = "") =
-        withContext(Dispatchers.IO) {
-            dao.toggleVisited(restaurant.id, System.currentTimeMillis(), notes)
-        }
-
     suspend fun toggleFavorite(id: Long) = withContext(Dispatchers.IO) {
         dao.toggleFavorite(id, System.currentTimeMillis())
     }
@@ -152,8 +134,6 @@ class RestaurantRepository(
     suspend fun toggleVisited(id: Long, notes: String = "") = withContext(Dispatchers.IO) {
         dao.toggleVisited(id, System.currentTimeMillis(), notes)
     }
-
-    fun isImageExpired(restaurant: RestaurantEntity): Boolean = scraper.isImageExpired(restaurant)
 
     suspend fun fetchRestaurantDetails(restaurant: RestaurantEntity): RestaurantEntity =
         scraper.fetchAndStoreDetails(restaurant)
@@ -164,13 +144,14 @@ class RestaurantRepository(
 
         val root = JSONObject()
         root.put("app", "Foodie 2.0")
-        root.put("version", 1)
+        root.put("version", 2)
         root.put("exportedAt", System.currentTimeMillis())
         root.put("totalItems", exported.size)
 
         val array = JSONArray()
         for (item in exported) {
             val obj = JSONObject()
+            obj.put("sourceKey", item.sourceKey)
             obj.put("name", item.name)
             obj.put("url", item.url)
             obj.put("address", item.address)
@@ -187,17 +168,20 @@ class RestaurantRepository(
     }
 
     /**
-     * Imports favorites and visited from a JSON string.
-     * Returns the count of successfully updated records.
+     * Restores favourites and visited places from a backup JSON string.
+     *
+     * Entries that no longer match a catalogue row are skipped and counted rather than
+     * aborting the whole restore. Returns null when the file is not a valid backup, or
+     * when none of its entries could be matched (existing data is then left untouched).
      */
-    suspend fun importFavoritesAndVisitedJson(jsonString: String): Int =
+    suspend fun importFavoritesAndVisitedJson(jsonString: String): ImportResult? =
         withContext(Dispatchers.IO) {
             try {
                 val root = JSONObject(jsonString)
                 val version = root.optInt("version", -1)
-                if (version !in setOf(1, 2)) return@withContext -1
+                if (version !in setOf(1, 2)) return@withContext null
 
-                val array = root.optJSONArray("restaurants") ?: return@withContext -1
+                val array = root.optJSONArray("restaurants") ?: return@withContext null
                 val all = dao.getAllDirect()
                 val bySourceKey = all.associateBy { it.sourceKey }
                 val byUrl = all.filter { it.url.isNotBlank() }
@@ -208,22 +192,27 @@ class RestaurantRepository(
                 }.mapValues { (_, matches) -> matches.singleOrNull() }
 
                 val states = ArrayList<ImportedUserState>(array.length())
+                var skipped = 0
                 for (i in 0 until array.length()) {
-                    val obj = array.optJSONObject(i) ?: return@withContext -1
+                    val obj = array.optJSONObject(i)
+                    if (obj == null) {
+                        skipped++
+                        continue
+                    }
                     val sourceKey = obj.optString("sourceKey").trim()
                     val url = obj.optString("url").trim()
                     val name = obj.optString("name").trim()
                     val location = obj.optString("location").trim()
 
-                    val target = when {
-                        sourceKey.isNotBlank() -> bySourceKey[sourceKey]
-                        url.isNotBlank() -> byUrl[url]
-                        name.isNotBlank() -> byNameLocation[
-                            "${name.lowercase()}|${location.lowercase()}"
-                        ]
+                    val target = bySourceKey[sourceKey].takeIf { sourceKey.isNotBlank() }
+                        ?: byUrl[url].takeIf { url.isNotBlank() }
+                        ?: byNameLocation["${name.lowercase()}|${location.lowercase()}"]
+                            .takeIf { name.isNotBlank() }
 
-                        else -> null
-                    } ?: return@withContext -1
+                    if (target == null) {
+                        skipped++
+                        continue
+                    }
 
                     states += ImportedUserState(
                         sourceKey = target.sourceKey,
@@ -235,12 +224,18 @@ class RestaurantRepository(
                     )
                 }
 
+                // Restoring replaces current user state, so never do it for a file where
+                // nothing could be matched.
+                if (states.isEmpty() && skipped > 0) return@withContext null
+
                 dao.restoreUserState(states)
-                states.count { it.isFavorite || it.isVisited }
+                ImportResult(
+                    restored = states.count { it.isFavorite || it.isVisited },
+                    skipped = skipped
+                )
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to import JSON", e)
-                -1
+                null
             }
         }
-
 }

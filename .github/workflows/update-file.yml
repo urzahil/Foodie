@@ -14,13 +14,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Download latest file
         run: |
-          curl -fsSL \
-            https://raw.githubusercontent.com/ngshiheng/michelin-my-maps/refs/heads/main/data/michelin_my_maps.csv \
-            -o file
+          curl -fsSL -O \
+            https://raw.githubusercontent.com/ngshiheng/michelin-my-maps/refs/heads/main/data/michelin_my_maps.csv
       - name: Commit if changed
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add file
-          git diff --cached --quiet || git commit -m "Update file from upstream"
+          git add michelin_my_maps.csv
+          git diff --cached --quiet || git commit -m "Update michelin_my_maps.csv from upstream"
           git push

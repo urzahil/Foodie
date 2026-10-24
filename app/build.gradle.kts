@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example"
+    namespace = "rocks.urzahil.foodie"
     compileSdk { version = release(36) { minorApiLevel = 1 } }
 
     defaultConfig {
-        applicationId = "com.aistudio.foodie.michelin"
+        applicationId = "rocks.urzahil.foodie"
         minSdk = 24
         targetSdk = 36
         versionCode = 11

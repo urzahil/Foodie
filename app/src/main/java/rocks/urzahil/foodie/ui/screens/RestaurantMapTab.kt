@@ -1,5 +1,8 @@
 package rocks.urzahil.foodie.ui.screens
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -44,6 +47,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import rocks.urzahil.foodie.data.local.RestaurantListItem
 import rocks.urzahil.foodie.location.LocationHelper
 import rocks.urzahil.foodie.location.LocationTarget
@@ -69,6 +73,12 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "RestaurantMapTab"
 
+private fun isLocationPermissionGranted(context: Context): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED
+
 private const val NO_POI_MAP_STYLE = """
 [
   {
@@ -92,6 +102,13 @@ fun RestaurantMapTab(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var mapsInitialized by remember { mutableStateOf(false) }
+
+    // The "my location" layer throws a SecurityException when enabled without a location
+    // permission (e.g. first run after a fresh install), so only enable it once granted.
+    var hasLocationPermission by remember { mutableStateOf(isLocationPermissionGranted(context)) }
+    LaunchedEffect(activeLocation, mapRecenterTrigger) {
+        hasLocationPermission = isLocationPermissionGranted(context)
+    }
 
     LaunchedEffect(Unit) {
         try {
@@ -157,7 +174,7 @@ fun RestaurantMapTab(
             cameraPositionState = cameraPositionState,
             properties = MapProperties(
                 mapType = MapType.NORMAL,
-                isMyLocationEnabled = true,
+                isMyLocationEnabled = hasLocationPermission,
                 mapStyleOptions = remember { MapStyleOptions(NO_POI_MAP_STYLE) }
             ),
             uiSettings = MapUiSettings(

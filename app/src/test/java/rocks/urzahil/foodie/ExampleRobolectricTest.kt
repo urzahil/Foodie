@@ -5,7 +5,6 @@ import androidx.test.core.app.ApplicationProvider
 import rocks.urzahil.foodie.location.LocationHelper
 import rocks.urzahil.foodie.data.network.MichelinCsvDownloader
 import rocks.urzahil.foodie.data.network.MichelinPageScraper
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -38,43 +37,6 @@ class ExampleRobolectricTest {
         assertEquals("2.4 km", LocationHelper.formatDistance(2.42))
     }
 
-    @Test
-    fun `backup JSON format contains valid schema structure`() {
-        val root = JSONObject()
-        root.put("app", "Foodie 2.0")
-        root.put("version", 1)
-        root.put("exportedAt", System.currentTimeMillis())
-        assertEquals("Foodie 2.0", root.getString("app"))
-        assertEquals(1, root.getInt("version"))
-    }
-
-    @Test
-    fun `cuisine extraction parses distinct individual cuisines correctly`() {
-        val rawEntries = listOf("Classic French, Seafood", "Japanese", "Contemporary / Creative", "Seafood")
-        val unique = rawEntries
-            .flatMap { it.split(",", "/", "&").map { c -> c.trim() } }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .sorted()
-
-        assertEquals(listOf("Classic French", "Contemporary", "Creative", "Japanese", "Seafood"), unique)
-    }
-
-    @Test
-    fun `available cuisines only reflect restaurants in the current results`() {
-        // Given 3 restaurants in current results (e.g. Rome 2 Stars)
-        val resultRestaurantsCuisines = listOf("Italian", "Mediterranean / Italian", "Contemporary")
-        val extracted = resultRestaurantsCuisines
-            .flatMap { it.split(",", "/", "&").map { c -> c.trim() } }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .sortedWith(String.CASE_INSENSITIVE_ORDER)
-
-        // Only cuisines present in the results are available
-        assertEquals(listOf("Contemporary", "Italian", "Mediterranean"), extracted)
-        assertTrue(!extracted.contains("Japanese"))
-        assertTrue(!extracted.contains("Classic French"))
-    }
     @Test
     fun `stable restaurant key prefers Michelin URL and has deterministic fallback`() {
         assertEquals(

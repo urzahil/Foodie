@@ -4,10 +4,7 @@ import androidx.compose.ui.graphics.Color
 
 // Brand Core Colors
 val MichelinRed = Color(0xFFDA291C)
-val MichelinRedDark = Color(0xFF8B0000)
-val MichelinRedLight = Color(0xFFFF5252)
 val MichelinGold = Color(0xFFFFD700)
-val MichelinAmber = Color(0xFFFFB300)
 
 // Award Specific Colors
 val BibGourmandColor = Color(0xFFFF5722)
@@ -75,12 +72,3 @@ val MdThemeLightSurfaceContainerLow = Color(0xFFFFF0EE)
 val MdThemeLightSurfaceContainer = Color(0xFFFAEA88)
 val MdThemeLightSurfaceContainerHigh = Color(0xFFF4E4E2)
 val MdThemeLightSurfaceContainerHighest = Color(0xFFEEE0DE)
-
-// Legacy Aliases for backwards compatibility
-val DarkBackground = MdThemeDarkBackground
-val DarkSurface = MdThemeDarkSurfaceContainer
-val DarkSurfaceVariant = MdThemeDarkSurfaceContainerHigh
-val DarkSurfaceElevated = MdThemeDarkSurfaceContainerHighest
-val TextPrimary = MdThemeDarkOnSurface
-val TextSecondary = MdThemeDarkOnSurfaceVariant
-val TextTertiary = MdThemeDarkOutline

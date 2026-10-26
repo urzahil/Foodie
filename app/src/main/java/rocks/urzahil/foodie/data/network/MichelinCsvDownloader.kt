@@ -36,7 +36,6 @@ class MichelinCsvDownloader(
         private const val PREFS_NAME = "foodie_prefs"
         private const val KEY_LAST_SYNC = "last_csv_sync_time"
 
-        // const val ONE_MONTH_MS = 30L * 24 * 60 * 60 * 1000L
         const val SYNC_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000L
 
         /** Minimum fraction of the existing row count a new download must reach to be applied. */
@@ -78,7 +77,6 @@ class MichelinCsvDownloader(
         val count = restaurantDao.getCount()
         val lastSync = getLastSyncTime()
         val now = System.currentTimeMillis()
-        // val olderThanMonth = (now - lastSync) > ONE_MONTH_MS
         val syncDue = (now - lastSync) > SYNC_INTERVAL_MS
 
         if (count > 0 && !syncDue && !force) {

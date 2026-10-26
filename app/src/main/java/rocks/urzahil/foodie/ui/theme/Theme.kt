@@ -90,17 +90,3 @@ fun FoodieTheme(
         content = content
     )
 }
-
-// Keep alias for compatibility
-@Composable
-fun MyApplicationTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    FoodieTheme(
-        darkTheme = darkTheme,
-        dynamicColor = dynamicColor,
-        content = content
-    )
-}

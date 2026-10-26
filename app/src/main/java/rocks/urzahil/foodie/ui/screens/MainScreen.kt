@@ -16,9 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreVert
@@ -106,7 +106,6 @@ fun MainScreen(
     LaunchedEffect(uiState.toastMessage) {
         uiState.toastMessage?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
-            snackbarHostState.showSnackbar(it)
             viewModel.clearToast()
         }
     }
@@ -114,7 +113,7 @@ fun MainScreen(
     LaunchedEffect(uiState.gpsErrorMessage) {
         uiState.gpsErrorMessage?.let {
             snackbarHostState.showSnackbar(it)
-            viewModel.clearToast()
+            viewModel.clearGpsError()
         }
     }
 
@@ -123,8 +122,9 @@ fun MainScreen(
         RestaurantDetailsScreen(
             restaurant = details,
             onBack = { viewModel.closeRestaurantDetails() },
-            onToggleFavorite = { viewModel.toggleFavorite(details) },
-            onToggleVisited = { notes -> viewModel.toggleVisited(details, notes) }
+            onToggleFavorite = { viewModel.toggleFavorite(details.id) },
+            onToggleVisited = { notes -> viewModel.toggleVisited(details.id, notes) },
+            onUpdateVisitedNotes = { notes -> viewModel.updateVisitedNotes(details.id, notes) }
         )
         return
     }
@@ -338,7 +338,7 @@ fun MainScreen(
                     text = { Text("List", style = MaterialTheme.typography.labelLarge) },
                     icon = {
                         Icon(
-                            Icons.Default.FormatListBulleted,
+                            Icons.AutoMirrored.Filled.FormatListBulleted,
                             contentDescription = "List View",
                             modifier = Modifier.size(18.dp)
                         )
@@ -496,7 +496,7 @@ fun MainScreen(
             jsonText = uiState.backupJsonText,
             onDismiss = { viewModel.showBackupDialog(false) },
             onImport = { json -> viewModel.importBackup(json) },
-            onBackupResult = { success, msg -> viewModel.onBackupCompleted(success, msg) }
+            onBackupResult = { msg -> viewModel.onBackupCompleted(msg) }
         )
     }
 }

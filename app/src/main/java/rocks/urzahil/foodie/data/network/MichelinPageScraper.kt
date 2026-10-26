@@ -1,6 +1,5 @@
 package rocks.urzahil.foodie.data.network
 
-import android.content.Context
 import android.util.Log
 import rocks.urzahil.foodie.data.local.RestaurantDao
 import rocks.urzahil.foodie.data.local.RestaurantEntity
@@ -12,45 +11,69 @@ import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 class MichelinPageScraper(
-    private val context: Context,
     private val restaurantDao: RestaurantDao
 ) {
     companion object {
         private const val TAG = "MichelinPageScraper"
         private const val ONE_MONTH_MS = 30L * 24 * 60 * 60 * 1000L
 
+        private val ALL_DAYS = listOf(
+            "Monday", "Tuesday", "Wednesday", "Thursday",
+            "Friday", "Saturday", "Sunday"
+        )
+
+        // Patterns are compiled once: a Michelin page is large and is parsed on every
+        // details/image fetch.
+        private val DAY_PATTERN = Pattern.compile(
+            "\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun)\\b",
+            Pattern.CASE_INSENSITIVE
+        )
+        private val TIME_PATTERN = Pattern.compile(
+            "\\b(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s*[AaPp][Mm])?\\s*(?:[-–—]|to)\\s*(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s*[AaPp][Mm])?\\b|\\b(?:1[0-2]|0?[1-9])\\s*[AaPp][Mm]\\s*(?:[-–—]|to)\\s*(?:1[0-2]|0?[1-9])\\s*[AaPp][Mm]\\b",
+            Pattern.CASE_INSENSITIVE
+        )
+        private val JSON_LD_OPENING_HOURS = Pattern.compile(
+            """\"openingHours\"\s*:\s*(\[[^\]]+\]|\"[^\"]+\")""",
+            Pattern.CASE_INSENSITIVE
+        )
+        private val QUOTED_VALUE = Regex("""["\']([^"\']+)["\']""")
+        private val CLOSED = Regex("\\bclosed\\b", RegexOption.IGNORE_CASE)
+        private val WHITESPACE = Regex("\\s+")
+        private val DASH = Regex("\\s*[-–—]\\s*")
+        private val TO = Regex("\\s+to\\s+", RegexOption.IGNORE_CASE)
+
+        private val BR_TAG = Regex("(?i)<br\\s*/?>")
+        private val BLOCK_END_TAG = Regex("(?i)</(div|li|p|tr|td|th|section|article)>")
+        private val ANY_TAG = Regex("<[^>]+>")
+        private val HORIZONTAL_SPACE = Regex("[ \\t]+")
+        private val SPACE_AFTER_NEWLINE = Regex("\\n[ \\t]+")
+        private val SPACE_BEFORE_NEWLINE = Regex("[ \\t]+\\n")
+
         // Regex matching the official Michelin image format:
         // https://prod-pics.guide.michelin.com/api/public/content/<hash>.<ext>
+        private val PROD_PICS_PATTERN = Pattern.compile(
+            """https://prod-pics\.guide\.michelin\.com/api/public/content/([a-zA-Z0-9_-]+)\.(?:jpg|jpeg|png|webp)""",
+            Pattern.CASE_INSENSITIVE
+        )
+
         internal fun parseOpeningHours(html: String): String? {
             try {
-                val allDays = listOf(
-                    "Monday", "Tuesday", "Wednesday", "Thursday",
-                    "Friday", "Saturday", "Sunday"
-                )
                 val result = linkedMapOf<String, MutableList<String>>()
-                val dayPattern = Pattern.compile(
-                    "\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun)\\b",
-                    Pattern.CASE_INSENSITIVE
-                )
-                val timePattern = Pattern.compile(
-                    "\\b(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s*[AaPp][Mm])?\\s*(?:[-–—]|to)\\s*(?:[01]?\\d|2[0-3]):[0-5]\\d(?:\\s*[AaPp][Mm])?\\b|\\b(?:1[0-2]|0?[1-9])\\s*[AaPp][Mm]\\s*(?:[-–—]|to)\\s*(?:1[0-2]|0?[1-9])\\s*[AaPp][Mm]\\b",
-                    Pattern.CASE_INSENSITIVE
-                )
 
                 fun addTimes(day: String, text: String) {
-                    val matcher = timePattern.matcher(text)
+                    val matcher = TIME_PATTERN.matcher(text)
                     while (matcher.find()) {
                         val normalized = matcher.group()
-                            .replace(Regex("\\s+"), " ")
-                            .replace(Regex("\\s*[-–—]\\s*"), "–")
-                            .replace(Regex("\\s+to\\s+", RegexOption.IGNORE_CASE), "–")
+                            .replace(WHITESPACE, " ")
+                            .replace(DASH, "–")
+                            .replace(TO, "–")
                             .trim()
                         result.getOrPut(day) { mutableListOf() }.add(normalized)
                     }
                 }
 
                 val text = htmlFragmentToText(html)
-                val dayMatcher = dayPattern.matcher(text)
+                val dayMatcher = DAY_PATTERN.matcher(text)
                 val dayRanges = mutableListOf<Triple<String, Int, Int>>()
                 while (dayMatcher.find()) {
                     val day = normalizeDay(dayMatcher.group(1)) ?: continue
@@ -69,9 +92,8 @@ class MichelinPageScraper(
                     // page actually provides hours or explicitly says that it is closed.
                     // This prevents day names appearing in descriptions/navigation from
                     // being interpreted as restaurant hours.
-                    val hasTimeRange = timePattern.matcher(section).find()
-                    val isClosed =
-                        Regex("\\bclosed\\b", RegexOption.IGNORE_CASE).containsMatchIn(section)
+                    val hasTimeRange = TIME_PATTERN.matcher(section).find()
+                    val isClosed = CLOSED.containsMatchIn(section)
                     if (hasTimeRange || isClosed) {
                         if (isClosed && !hasTimeRange) {
                             result.getOrPut(day) { mutableListOf() }
@@ -81,17 +103,14 @@ class MichelinPageScraper(
                 }
 
                 // Also inspect JSON-LD openingHours values, but extract only time ranges from them.
-                val ld = Pattern.compile(
-                    """\"openingHours\"\s*:\s*(\[[^\]]+\]|\"[^\"]+\")""",
-                    Pattern.CASE_INSENSITIVE
-                ).matcher(html)
+                val ld = JSON_LD_OPENING_HOURS.matcher(html)
                 while (ld.find()) {
                     val raw = ld.group(1)
-                    val values = Regex("""["\']([^"\']+)["\']""").findAll(raw)
+                    val values = QUOTED_VALUE.findAll(raw)
                         .map { it.groupValues[1] }
                         .toList()
                     for (value in values) {
-                        val m = dayPattern.matcher(value)
+                        val m = DAY_PATTERN.matcher(value)
                         if (!m.find()) continue
                         val day = normalizeDay(m.group(1)) ?: continue
                         addTimes(day, value.substring(m.end()))
@@ -102,7 +121,7 @@ class MichelinPageScraper(
 
                 // Render only days explicitly present on the Michelin page. Missing days
                 // are unknown, not evidence that the restaurant is closed.
-                return allDays
+                return ALL_DAYS
                     .filter { result.containsKey(it) }
                     .joinToString("\n") { day ->
                         val unique = result[day].orEmpty().distinct()
@@ -114,17 +133,23 @@ class MichelinPageScraper(
             }
         }
 
+        /** Returns the canonical .jpg URL of the first Michelin image in [content], if any. */
+        private fun extractImageUrl(content: String): String? {
+            val matcher = PROD_PICS_PATTERN.matcher(content)
+            if (!matcher.find()) return null
+            return "https://prod-pics.guide.michelin.com/api/public/content/${matcher.group(1)}.jpg"
+        }
 
         private fun htmlFragmentToText(value: String): String {
             return value
-                .replace(Regex("(?i)<br\\s*/?>"), "\n")
-                .replace(Regex("(?i)</(div|li|p|tr|td|th|section|article)>"), "\n")
-                .replace(Regex("<[^>]+>"), " ")
+                .replace(BR_TAG, "\n")
+                .replace(BLOCK_END_TAG, "\n")
+                .replace(ANY_TAG, " ")
                 .replace("&nbsp;", " ").replace("&amp;", "&").replace("&ndash;", "–")
                 .replace("&mdash;", "—")
-                .replace(Regex("[ \\t]+"), " ")
-                .replace(Regex("\\n[ \\t]+"), "\n")
-                .replace(Regex("[ \\t]+\\n"), "\n")
+                .replace(HORIZONTAL_SPACE, " ")
+                .replace(SPACE_AFTER_NEWLINE, "\n")
+                .replace(SPACE_BEFORE_NEWLINE, "\n")
                 .trim()
         }
 
@@ -140,11 +165,6 @@ class MichelinPageScraper(
                 else -> null
             }
         }
-
-        val PROD_PICS_PATTERN = Pattern.compile(
-            """https://prod-pics\.guide\.michelin\.com/api/public/content/([a-zA-Z0-9_-]+)\.(?:jpg|jpeg|png|webp)""",
-            Pattern.CASE_INSENSITIVE
-        )
     }
 
     private val client = OkHttpClient.Builder()
@@ -153,22 +173,23 @@ class MichelinPageScraper(
         .followRedirects(true)
         .build()
 
-    fun isImageExpired(restaurant: RestaurantEntity): Boolean =
-        restaurant.imageUrl.isNullOrBlank()
-
+    /**
+     * Discovers the restaurant's image URL and opening hours from its Michelin page and
+     * stores them. Image bytes are not downloaded here; Coil owns the image disk cache.
+     */
     suspend fun fetchAndStoreDetails(restaurant: RestaurantEntity): RestaurantEntity =
         withContext(Dispatchers.IO) {
-            val imageExpired = isImageExpired(restaurant)
+            val imageMissing = restaurant.imageUrl.isNullOrBlank()
             val hoursExpired = isOpeningHoursExpired(restaurant)
 
-            if (!imageExpired && !hoursExpired) {
+            if (!imageMissing && !hoursExpired) {
                 return@withContext restaurant
             }
 
             var scrapedImageUrl: String? = null
             var extractedHours: String? = null
 
-            if (restaurant.url.isNotBlank() && restaurant.url.startsWith("http")) {
+            if (restaurant.url.startsWith("http")) {
                 try {
                     val request = Request.Builder()
                         .url(restaurant.url)
@@ -186,46 +207,15 @@ class MichelinPageScraper(
                     client.newCall(request).execute().use { response ->
                         if (response.isSuccessful) {
                             val html = response.body?.string().orEmpty()
-
-                            if (imageExpired) {
-                                val matcher = PROD_PICS_PATTERN.matcher(html)
-                                if (matcher.find()) {
-                                    val hash = matcher.group(1)
-                                    scrapedImageUrl =
-                                        "https://prod-pics.guide.michelin.com/api/public/content/$hash.jpg"
-                                }
-
-                                if (scrapedImageUrl.isNullOrBlank()) {
-                                    val ciSrcPattern = Pattern.compile(
-                                        """<img[^>]+(?:ci-src|data-src|src)=["']([^"']+)["']""",
-                                        Pattern.CASE_INSENSITIVE
-                                    ).matcher(html)
-                                    while (ciSrcPattern.find()) {
-                                        val urlCandidate =
-                                            ciSrcPattern.group(1).replace("&amp;", "&")
-                                        if (urlCandidate.contains("prod-pics.guide.michelin.com")) {
-                                            val m = PROD_PICS_PATTERN.matcher(urlCandidate)
-                                            if (m.find()) {
-                                                val hash = m.group(1)
-                                                scrapedImageUrl =
-                                                    "https://prod-pics.guide.michelin.com/api/public/content/$hash.jpg"
-                                                break
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (hoursExpired) {
-                                extractedHours = parseOpeningHours(html)
-                            }
+                            if (imageMissing) scrapedImageUrl = extractImageUrl(html)
+                            if (hoursExpired) extractedHours = parseOpeningHours(html)
                         }
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Direct scraping failed for ${restaurant.name}: ${e.message}")
                 }
 
-                if ((imageExpired && scrapedImageUrl.isNullOrBlank()) ||
+                if ((imageMissing && scrapedImageUrl == null) ||
                     (hoursExpired && extractedHours.isNullOrBlank())
                 ) {
                     try {
@@ -238,16 +228,9 @@ class MichelinPageScraper(
                         client.newCall(proxyReq).execute().use { proxyResp ->
                             if (proxyResp.isSuccessful) {
                                 val content = proxyResp.body?.string().orEmpty()
-
-                                if (imageExpired && scrapedImageUrl.isNullOrBlank()) {
-                                    val matcher = PROD_PICS_PATTERN.matcher(content)
-                                    if (matcher.find()) {
-                                        val hash = matcher.group(1)
-                                        scrapedImageUrl =
-                                            "https://prod-pics.guide.michelin.com/api/public/content/$hash.jpg"
-                                    }
+                                if (imageMissing && scrapedImageUrl == null) {
+                                    scrapedImageUrl = extractImageUrl(content)
                                 }
-
                                 if (hoursExpired && extractedHours.isNullOrBlank()) {
                                     extractedHours = parseOpeningHours(content)
                                 }
@@ -259,44 +242,24 @@ class MichelinPageScraper(
                 }
             }
 
-            val finalImageUrl = when {
-                !imageExpired -> restaurant.imageUrl
-                !scrapedImageUrl.isNullOrBlank() -> scrapedImageUrl
-                !restaurant.imageUrl.isNullOrBlank() && !restaurant.imageUrl.contains("unsplash.com") -> restaurant.imageUrl
-                else -> null
-            }
-
+            val finalImageUrl = if (imageMissing) scrapedImageUrl else restaurant.imageUrl
             val finalHours = extractedHours?.takeIf { it.isNotBlank() }
-            val hoursFetched = !finalHours.isNullOrBlank()
-
-            // Image bytes are no longer downloaded into app-private files here.
-            // Coil owns the disk cache. This request only discovers/stores the canonical image URL.
-            val localPath = restaurant.localImagePath
-            val imageDownloaded = false
-
             val timestamp = System.currentTimeMillis()
-            val storedImageTimestamp =
-                if (imageDownloaded) timestamp else restaurant.imageLastDownloaded
-            val storedHoursTimestamp =
-                if (hoursFetched) timestamp else restaurant.openingHoursLastFetched
-            val storedHours = finalHours ?: restaurant.openingHours
 
-            restaurantDao.updateImageData(
+            // A null finalHours leaves the stored opening hours untouched.
+            restaurantDao.updateScrapedDetails(
                 id = restaurant.id,
-                localPath = localPath,
                 imageUrl = finalImageUrl,
                 timestamp = timestamp,
-                imageDownloaded = imageDownloaded,
-                openingHours = storedHours,
-                hoursFetched = hoursFetched
+                openingHours = finalHours,
+                hoursFetched = finalHours != null
             )
 
             return@withContext restaurant.copy(
-                localImagePath = localPath,
                 imageUrl = finalImageUrl,
-                imageLastDownloaded = storedImageTimestamp,
-                openingHours = storedHours,
-                openingHoursLastFetched = storedHoursTimestamp
+                openingHours = finalHours ?: restaurant.openingHours,
+                openingHoursLastFetched =
+                    if (finalHours != null) timestamp else restaurant.openingHoursLastFetched
             )
         }
 

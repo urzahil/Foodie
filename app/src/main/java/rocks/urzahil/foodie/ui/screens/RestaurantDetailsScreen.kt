@@ -1,5 +1,6 @@
 package rocks.urzahil.foodie.ui.screens
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -23,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
@@ -31,7 +33,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.CheckCircleOutline
@@ -85,6 +86,7 @@ fun RestaurantDetailsScreen(
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
     onToggleVisited: (notes: String) -> Unit,
+    onUpdateVisitedNotes: (notes: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -194,11 +196,9 @@ fun RestaurantDetailsScreen(
                                     "Check out ${restaurant.name} (${restaurant.award}) in ${restaurant.location} on Michelin Guide: ${restaurant.url}"
                                 )
                             }
-                            context.startActivity(
-                                Intent.createChooser(
-                                    shareIntent,
-                                    "Share Restaurant"
-                                )
+                            context.startActivitySafely(
+                                Intent.createChooser(shareIntent, "Share Restaurant"),
+                                "Cannot share restaurant"
                             )
                         },
                         modifier = Modifier.size(42.dp),
@@ -307,6 +307,7 @@ fun RestaurantDetailsScreen(
                     FilledTonalButton(
                         onClick = {
                             if (!restaurant.isVisited) {
+                                notesInput = ""
                                 showNotesDialog = true
                             } else {
                                 onToggleVisited("")
@@ -354,7 +355,10 @@ fun RestaurantDetailsScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(
-                                onClick = { showNotesDialog = true },
+                                onClick = {
+                                    notesInput = restaurant.visitedNotes
+                                    showNotesDialog = true
+                                },
                                 modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(
@@ -426,18 +430,13 @@ fun RestaurantDetailsScreen(
                         if (hasPhone) {
                             Button(
                                 onClick = {
-                                    val dialIntent = Intent(Intent.ACTION_DIAL).apply {
-                                        data = Uri.parse("tel:${restaurant.phoneNumber}")
-                                    }
-                                    try {
-                                        context.startActivity(dialIntent)
-                                    } catch (_: Exception) {
-                                        Toast.makeText(
-                                            context,
-                                            "Cannot open dialer: ${restaurant.phoneNumber}",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
+                                    context.startActivitySafely(
+                                        Intent(
+                                            Intent.ACTION_DIAL,
+                                            Uri.parse("tel:${restaurant.phoneNumber}")
+                                        ),
+                                        "Cannot open dialer: ${restaurant.phoneNumber}"
+                                    )
                                 },
                                 modifier = Modifier
                                     .weight(1f)
@@ -458,27 +457,14 @@ fun RestaurantDetailsScreen(
                         if (hasWebsite) {
                             Button(
                                 onClick = {
-                                    val webIntent = Intent(Intent.ACTION_VIEW).apply {
-                                        val url =
-                                            if (!restaurant.websiteUrl.startsWith("http://") && !restaurant.websiteUrl.startsWith(
-                                                    "https://"
-                                                )
-                                            ) {
-                                                "https://${restaurant.websiteUrl}"
-                                            } else {
-                                                restaurant.websiteUrl
-                                            }
-                                        data = Uri.parse(url)
-                                    }
-                                    try {
-                                        context.startActivity(webIntent)
-                                    } catch (_: Exception) {
-                                        Toast.makeText(
-                                            context,
-                                            "Cannot open website",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
+                                    val url = restaurant.websiteUrl
+                                    val fullUrl =
+                                        if (url.startsWith("http://") || url.startsWith("https://")) url
+                                        else "https://$url"
+                                    context.startActivitySafely(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl)),
+                                        "Cannot open website"
+                                    )
                                 },
                                 modifier = Modifier
                                     .weight(1f)
@@ -547,8 +533,10 @@ fun RestaurantDetailsScreen(
                                         Uri.encode(restaurant.name)
                                     })"
                                 )
-                                val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-                                context.startActivity(mapIntent)
+                                context.startActivitySafely(
+                                    Intent(Intent.ACTION_VIEW, gmmIntentUri),
+                                    "No maps app available"
+                                )
                             },
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MichelinGold),
                             border = androidx.compose.foundation.BorderStroke(1.dp, MichelinGold),
@@ -650,8 +638,10 @@ fun RestaurantDetailsScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     OutlinedButton(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(restaurant.url))
-                            context.startActivity(intent)
+                            context.startActivitySafely(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(restaurant.url)),
+                                "Cannot open Michelin Guide page"
+                            )
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -662,7 +652,7 @@ fun RestaurantDetailsScreen(
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                     ) {
                         Icon(
-                            Icons.Default.OpenInNew,
+                            Icons.AutoMirrored.Filled.OpenInNew,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp)
                         )
@@ -686,7 +676,7 @@ fun RestaurantDetailsScreen(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             title = {
                 Text(
-                    "Mark as Visited",
+                    if (restaurant.isVisited) "Edit Notes" else "Mark as Visited",
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold
                 )
@@ -720,12 +710,22 @@ fun RestaurantDetailsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        onToggleVisited(notesInput)
+                        // Toggling an already-visited restaurant would un-visit it and drop
+                        // its notes, so edits go through the notes-only update.
+                        if (restaurant.isVisited) {
+                            onUpdateVisitedNotes(notesInput)
+                        } else {
+                            onToggleVisited(notesInput)
+                        }
                         showNotesDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = GreenStarColor)
                 ) {
-                    Text("Save as Visited", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (restaurant.isVisited) "Save Notes" else "Save as Visited",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             },
             dismissButton = {
@@ -734,5 +734,14 @@ fun RestaurantDetailsScreen(
                 }
             }
         )
+    }
+}
+
+/** Starts [intent], showing [errorMessage] instead of crashing when no app can handle it. */
+private fun Context.startActivitySafely(intent: Intent, errorMessage: String) {
+    try {
+        startActivity(intent)
+    } catch (_: Exception) {
+        Toast.makeText(this, errorMessage, Toast.LENGTH_SHORT).show()
     }
 }

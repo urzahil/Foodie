@@ -30,6 +30,14 @@ data class CityLocationRow(
     val longitude: Double
 )
 
+/** Identity fields used to match backup entries against the catalogue. */
+data class RestaurantMatchKeys(
+    val sourceKey: String,
+    val url: String,
+    val name: String,
+    val location: String
+)
+
 data class ImportedUserState(
     val sourceKey: String,
     val isFavorite: Boolean,
@@ -66,8 +74,36 @@ interface RestaurantDao {
         minLat: Double, maxLat: Double, minLng: Double, maxLng: Double
     ): Flow<List<RestaurantListItem>>
 
+    @Query(
+        """
+        SELECT id, sourceKey, name, address, location, price, cuisine,
+               longitude, latitude, award, greenStar, imageUrl, isFavorite, isVisited
+        FROM restaurants
+        WHERE isFavorite = 1
+        ORDER BY name ASC
+    """
+    )
+    fun observeFavoriteListItems(): Flow<List<RestaurantListItem>>
+
+    @Query(
+        """
+        SELECT id, sourceKey, name, address, location, price, cuisine,
+               longitude, latitude, award, greenStar, imageUrl, isFavorite, isVisited
+        FROM restaurants
+        WHERE isVisited = 1
+        ORDER BY name ASC
+    """
+    )
+    fun observeVisitedListItems(): Flow<List<RestaurantListItem>>
+
     @Query("SELECT * FROM restaurants")
     suspend fun getAllDirect(): List<RestaurantEntity>
+
+    @Query("SELECT * FROM restaurants WHERE isFavorite = 1 OR isVisited = 1")
+    suspend fun getFavoritesAndVisited(): List<RestaurantEntity>
+
+    @Query("SELECT sourceKey, url, name, location FROM restaurants")
+    suspend fun getMatchKeys(): List<RestaurantMatchKeys>
 
     @Query("SELECT * FROM restaurants WHERE id = :id LIMIT 1")
     fun getRestaurantById(id: Long): Flow<RestaurantEntity?>
@@ -100,15 +136,13 @@ interface RestaurantDao {
     )
     suspend fun toggleVisited(id: Long, timestamp: Long, notes: String)
 
+    @Query("UPDATE restaurants SET visitedNotes = :notes WHERE id = :id AND isVisited = 1")
+    suspend fun updateVisitedNotes(id: Long, notes: String)
+
     @Query(
         """
         UPDATE restaurants
-        SET localImagePath = :localPath,
-            imageUrl = :imageUrl,
-            imageLastDownloaded = CASE
-                WHEN :imageDownloaded = 1 THEN :timestamp
-                ELSE imageLastDownloaded
-            END,
+        SET imageUrl = :imageUrl,
             openingHours = CASE
                 WHEN :openingHours IS NOT NULL AND :openingHours != '' THEN :openingHours
                 ELSE openingHours
@@ -120,21 +154,13 @@ interface RestaurantDao {
         WHERE id = :id
     """
     )
-    suspend fun updateImageData(
+    suspend fun updateScrapedDetails(
         id: Long,
-        localPath: String?,
         imageUrl: String?,
         timestamp: Long,
-        imageDownloaded: Boolean,
         openingHours: String?,
         hoursFetched: Boolean
     )
-
-    @Query("SELECT * FROM restaurants WHERE isFavorite = 1 ORDER BY favoriteTimestamp DESC")
-    fun getFavorites(): Flow<List<RestaurantEntity>>
-
-    @Query("SELECT * FROM restaurants WHERE isVisited = 1 ORDER BY visitedTimestamp DESC")
-    fun getVisited(): Flow<List<RestaurantEntity>>
 
     @Query(
         """

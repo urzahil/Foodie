@@ -2,6 +2,7 @@ package rocks.urzahil.foodie.ui
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import rocks.urzahil.foodie.FoodieApp
@@ -12,10 +13,13 @@ import rocks.urzahil.foodie.data.repository.AutocompleteSuggestion
 import rocks.urzahil.foodie.data.repository.RestaurantRepository
 import rocks.urzahil.foodie.location.LocationHelper
 import rocks.urzahil.foodie.location.LocationTarget
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +35,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.cos
 
 enum class MichelinAwardFilter(val label: String, val dbMatch: String) {
     THREE_STARS("3 Stars", "3 Stars"),
@@ -98,6 +104,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         const val IMAGE_MISSING_RETRY_MS = 6 * 60 * 60 * 1000L
         const val DETAILS_RETRY_MS = 60 * 60 * 1000L
         const val MAX_TEXT_SEARCH_RESULTS = 300
+        const val LOCATION_ZOOM = 12f
     }
 
     private val repository: RestaurantRepository =
@@ -119,13 +126,13 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
     var preservedListOffset: Int = 0
 
     // Map camera position preservation across tabs & navigation
-    var lastMapCameraPosition: com.google.android.gms.maps.model.CameraPosition? = null
+    var lastMapCameraPosition: CameraPosition? = null
     var lastHandledRecenterTrigger: Long = 0L
 
     private var autocompleteJob: Job? = null
     private val imageDownloadSemaphore = Semaphore(3)
-    private val imageRetryAfter = java.util.concurrent.ConcurrentHashMap<Long, Long>()
-    private val detailsRetryAfter = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+    private val imageRetryAfter = ConcurrentHashMap<Long, Long>()
+    private val detailsRetryAfter = ConcurrentHashMap<Long, Long>()
 
     init {
         restoreLastState()
@@ -202,16 +209,22 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
             FilterParams("", null, emptySet(), null, SpecialListMode.ALL)
         )
 
-    private fun candidatesFor(params: FilterParams): kotlinx.coroutines.flow.Flow<List<RestaurantListItem>> {
+    private fun candidatesFor(params: FilterParams): Flow<List<RestaurantListItem>> {
+        when (params.mode) {
+            SpecialListMode.FAVORITES_ONLY -> return repository.favoriteRestaurants
+            SpecialListMode.VISITED_ONLY -> return repository.visitedRestaurants
+            SpecialListMode.ALL -> Unit
+        }
+
         val loc = params.location
         // A text search looks beyond the 30 km box so a restaurant can be found by name anywhere.
-        if (params.mode != SpecialListMode.ALL || loc == null || params.isTextSearch) {
+        if (loc == null || params.isTextSearch) {
             return repository.allRestaurants
         }
 
         val radius = LocationHelper.MAX_RADIUS_KM
         val latDelta = radius / 111.0
-        val cosLat = kotlin.math.cos(Math.toRadians(loc.latitude)).coerceAtLeast(0.01)
+        val cosLat = cos(Math.toRadians(loc.latitude)).coerceAtLeast(0.01)
         val lngDelta = radius / (111.0 * cosLat)
         val minLat = (loc.latitude - latDelta).coerceIn(-90.0, 90.0)
         val maxLat = (loc.latitude + latDelta).coerceIn(-90.0, 90.0)
@@ -231,13 +244,8 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         candidates: List<RestaurantListItem>,
         params: FilterParams
     ): FilteredResult {
+        // Favourites/Visited modes are already narrowed by the database query.
         var list = candidates
-
-        if (params.mode == SpecialListMode.FAVORITES_ONLY) {
-            list = list.filter { it.isFavorite }
-        } else if (params.mode == SpecialListMode.VISITED_ONLY) {
-            list = list.filter { it.isVisited }
-        }
 
         if (params.awards.isNotEmpty()) {
             val matches = params.awards.map { it.dbMatch }
@@ -245,12 +253,12 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         if (params.isTextSearch) {
-            val q = params.query.lowercase().trim()
+            val q = params.query.trim()
             list = list.filter {
-                it.name.lowercase().contains(q) ||
-                        it.cuisine.lowercase().contains(q) ||
-                        it.location.lowercase().contains(q) ||
-                        it.address.lowercase().contains(q)
+                it.name.contains(q, ignoreCase = true) ||
+                        it.cuisine.contains(q, ignoreCase = true) ||
+                        it.location.contains(q, ignoreCase = true) ||
+                        it.address.contains(q, ignoreCase = true)
             }
         }
 
@@ -278,8 +286,8 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
             .sortedWith(String.CASE_INSENSITIVE_ORDER)
 
         val finalItems = if (!params.cuisine.isNullOrBlank()) {
-            val selected = params.cuisine.trim().lowercase()
-            withDistance.filter { it.restaurant.cuisine.lowercase().contains(selected) }
+            val selected = params.cuisine.trim()
+            withDistance.filter { it.restaurant.cuisine.contains(selected, ignoreCase = true) }
         } else {
             withDistance
         }
@@ -351,7 +359,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
                 } catch (e: Exception) {
                     imageRetryAfter[restaurant.id] =
                         System.currentTimeMillis() + IMAGE_ERROR_RETRY_MS
-                    android.util.Log.w(
+                    Log.w(
                         "FoodieViewModel",
                         "Image metadata fetch failed for ${restaurant.name}: ${e.message}"
                     )
@@ -427,26 +435,21 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Requirement: When clicking on the search tab/field, clear old text automatically.
+     * Starting a new search clears only the editable draft. The executed search and its
+     * restaurant list remain until the new search is submitted.
      */
     fun onSearchFieldClicked() {
-        // Starting a new search clears only the editable draft. The executed
-        // search and its restaurant list remain until the new search is submitted.
         if (_uiState.value.searchInputQuery.isNotEmpty()) {
             cancelSearch()
         }
     }
 
-    fun onAutocompleteSelected(suggestion: AutocompleteSuggestion) {
-        val target = LocationTarget(
-            name = suggestion.title,
-            latitude = suggestion.latitude,
-            longitude = suggestion.longitude,
-            isGpsLocation = false
-        )
-        lastMapCameraPosition = com.google.android.gms.maps.model.CameraPosition.fromLatLngZoom(
-            com.google.android.gms.maps.model.LatLng(target.latitude, target.longitude),
-            12f
+    /** Makes [target] the active location, clearing any search and recentring list and map. */
+    private fun moveToLocation(target: LocationTarget, toastMessage: String? = null) {
+        autocompleteJob?.cancel()
+        lastMapCameraPosition = CameraPosition.fromLatLngZoom(
+            LatLng(target.latitude, target.longitude),
+            LOCATION_ZOOM
         )
         _uiState.value = _uiState.value.copy(
             activeLocation = target,
@@ -455,9 +458,21 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
             searchQuery = "",
             searchInputQuery = "",
             autocompleteSuggestions = emptyList(),
-            isSearchingAutocomplete = false
+            isSearchingAutocomplete = false,
+            toastMessage = toastMessage ?: _uiState.value.toastMessage
         )
         saveCurrentState()
+    }
+
+    fun onAutocompleteSelected(suggestion: AutocompleteSuggestion) {
+        moveToLocation(
+            LocationTarget(
+                name = suggestion.title,
+                latitude = suggestion.latitude,
+                longitude = suggestion.longitude,
+                isGpsLocation = false
+            )
+        )
     }
 
     fun onNearMeClicked() {
@@ -465,22 +480,8 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
             _uiState.value = _uiState.value.copy(isLocatingGps = true, gpsErrorMessage = null)
             val loc = LocationHelper.getCurrentLocation(getApplication())
             if (loc != null) {
-                lastMapCameraPosition =
-                    com.google.android.gms.maps.model.CameraPosition.fromLatLngZoom(
-                        com.google.android.gms.maps.model.LatLng(loc.latitude, loc.longitude),
-                        12f
-                    )
-                _uiState.value = _uiState.value.copy(
-                    activeLocation = loc,
-                    mapRecenterTrigger = System.currentTimeMillis(),
-                    listResetTrigger = _uiState.value.listResetTrigger + 1,
-                    searchQuery = "",
-                    searchInputQuery = "",
-                    autocompleteSuggestions = emptyList(),
-                    isLocatingGps = false,
-                    toastMessage = "Located: ${loc.name}"
-                )
-                saveCurrentState()
+                _uiState.value = _uiState.value.copy(isLocatingGps = false)
+                moveToLocation(loc, toastMessage = "Located: ${loc.name}")
             } else {
                 _uiState.value = _uiState.value.copy(
                     isLocatingGps = false,
@@ -491,20 +492,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setLocationManually(name: String, lat: Double, lng: Double) {
-        val target = LocationTarget(name, lat, lng)
-        lastMapCameraPosition = com.google.android.gms.maps.model.CameraPosition.fromLatLngZoom(
-            com.google.android.gms.maps.model.LatLng(lat, lng),
-            12f
-        )
-        _uiState.value = _uiState.value.copy(
-            activeLocation = target,
-            mapRecenterTrigger = System.currentTimeMillis(),
-            listResetTrigger = _uiState.value.listResetTrigger + 1,
-            searchQuery = "",
-            searchInputQuery = "",
-            autocompleteSuggestions = emptyList()
-        )
-        saveCurrentState()
+        moveToLocation(LocationTarget(name, lat, lng))
     }
 
     fun toggleFilter(filter: MichelinAwardFilter) {
@@ -549,20 +537,17 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(selectedRestaurantId = null)
     }
 
-    fun toggleFavorite(restaurant: RestaurantListItem) {
-        viewModelScope.launch { repository.toggleFavorite(restaurant.id) }
+    fun toggleFavorite(restaurantId: Long) {
+        viewModelScope.launch { repository.toggleFavorite(restaurantId) }
     }
 
-    fun toggleFavorite(restaurant: RestaurantEntity) {
-        viewModelScope.launch { repository.toggleFavorite(restaurant.id) }
+    fun toggleVisited(restaurantId: Long, notes: String = "") {
+        viewModelScope.launch { repository.toggleVisited(restaurantId, notes) }
     }
 
-    fun toggleVisited(restaurant: RestaurantListItem, notes: String = "") {
-        viewModelScope.launch { repository.toggleVisited(restaurant.id, notes) }
-    }
-
-    fun toggleVisited(restaurant: RestaurantEntity, notes: String = "") {
-        viewModelScope.launch { repository.toggleVisited(restaurant.id, notes) }
+    /** Edits the notes of a restaurant that is already marked as visited. */
+    fun updateVisitedNotes(restaurantId: Long, notes: String) {
+        viewModelScope.launch { repository.updateVisitedNotes(restaurantId, notes) }
     }
 
     fun toggleShowListPhotos() {
@@ -572,7 +557,8 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun showBackupDialog(show: Boolean) {
-        _uiState.value = _uiState.value.copy(showBackupDialog = show)
+        // Drop any previous export so a stale snapshot can never be saved.
+        _uiState.value = _uiState.value.copy(showBackupDialog = show, backupJsonText = null)
         if (show) {
             viewModelScope.launch {
                 val json = repository.exportFavoritesAndVisitedJson()
@@ -581,11 +567,8 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun onBackupCompleted(success: Boolean, message: String) {
-        _uiState.value = _uiState.value.copy(
-            showBackupDialog = false,
-            toastMessage = message
-        )
+    fun onBackupCompleted(message: String) {
+        _uiState.value = _uiState.value.copy(toastMessage = message)
     }
 
     fun importBackup(jsonString: String) {
@@ -608,6 +591,10 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun clearToast() {
-        _uiState.value = _uiState.value.copy(toastMessage = null, gpsErrorMessage = null)
+        _uiState.value = _uiState.value.copy(toastMessage = null)
+    }
+
+    fun clearGpsError() {
+        _uiState.value = _uiState.value.copy(gpsErrorMessage = null)
     }
 }

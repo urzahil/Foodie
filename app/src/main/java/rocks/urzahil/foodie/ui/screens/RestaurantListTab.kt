@@ -121,8 +121,8 @@ fun RestaurantListTab(
                     restaurant = item.restaurant,
                     distanceKm = item.distanceKm,
                     onClick = { onRestaurantClick(item.restaurant) },
-                    onToggleFavorite = { viewModel.toggleFavorite(item.restaurant) },
-                    onToggleVisited = { viewModel.toggleVisited(item.restaurant) },
+                    onToggleFavorite = { viewModel.toggleFavorite(item.restaurant.id) },
+                    onToggleVisited = { viewModel.toggleVisited(item.restaurant.id) },
                     onEnsureImageDownloaded = { viewModel.ensureRestaurantImageDownloaded(item.restaurant) },
                     showPhoto = uiState.showListPhotos
                 )

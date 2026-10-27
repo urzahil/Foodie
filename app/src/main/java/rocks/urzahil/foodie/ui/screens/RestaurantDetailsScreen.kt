@@ -97,8 +97,7 @@ fun RestaurantDetailsScreen(
         onBack()
     }
 
-    val imageSource: Any? = restaurant.imageUrl
-        ?.takeIf { it.isNotBlank() && !it.contains("unsplash.com") }
+    val imageSource: String? = restaurant.imageUrl?.takeIf { it.isNotBlank() }
 
     Scaffold(
         modifier = modifier

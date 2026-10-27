@@ -9,8 +9,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [RestaurantEntity::class],
-    version = 4,
-    exportSchema = false
+    version = 5,
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun restaurantDao(): RestaurantDao
@@ -72,6 +72,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * An early version stored Unsplash placeholder photos as image URLs. A non-blank URL
+         * is never re-scraped, so clear them to let the real Michelin photo be fetched.
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "UPDATE restaurants SET imageUrl = NULL WHERE imageUrl LIKE '%unsplash.com%'"
+                )
+            }
+        }
+
+        internal val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -82,7 +96,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "foodie_michelin.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(*MIGRATIONS)
                     .build()
                 INSTANCE = instance
                 instance

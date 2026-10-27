@@ -66,8 +66,7 @@ fun RestaurantCard(
         }
     }
 
-    val imageSource: Any? = restaurant.imageUrl
-        ?.takeIf { it.isNotBlank() && !it.contains("unsplash.com") }
+    val imageSource: String? = restaurant.imageUrl?.takeIf { it.isNotBlank() }
 
     Card(
         modifier = modifier

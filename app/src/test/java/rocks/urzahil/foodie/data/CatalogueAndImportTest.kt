@@ -7,6 +7,7 @@ import rocks.urzahil.foodie.data.local.AppDatabase
 import rocks.urzahil.foodie.data.local.RestaurantDao
 import rocks.urzahil.foodie.data.local.RestaurantEntity
 import rocks.urzahil.foodie.data.repository.RestaurantRepository
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
@@ -113,5 +114,39 @@ class CatalogueAndImportTest {
         val result = repository.importFavoritesAndVisitedJson(json)
         assertEquals(1, result!!.restored)
         assertTrue(dao.getAllDirect().single().isFavorite)
+    }
+
+    @Test
+    fun `editing visited notes keeps the restaurant visited`() = runBlocking {
+        dao.applyCatalogue(listOf(restaurant("a")), syncToken = 1L)
+        val id = dao.getAllDirect().single().id
+        dao.toggleVisited(id, 10L, "first")
+
+        dao.updateVisitedNotes(id, "second")
+
+        val row = dao.getAllDirect().single()
+        assertTrue(row.isVisited)
+        assertEquals("second", row.visitedNotes)
+    }
+
+    @Test
+    fun `visited notes cannot be set on a restaurant that is not visited`() = runBlocking {
+        dao.applyCatalogue(listOf(restaurant("a")), syncToken = 1L)
+
+        dao.updateVisitedNotes(dao.getAllDirect().single().id, "orphan")
+
+        assertEquals("", dao.getAllDirect().single().visitedNotes)
+    }
+
+    @Test
+    fun `favourite and visited list queries only return matching rows`() = runBlocking {
+        dao.applyCatalogue(listOf("a", "b", "c").map(::restaurant), syncToken = 1L)
+        val rows = dao.getAllDirect().associateBy { it.sourceKey }
+        dao.toggleFavorite(rows.getValue("a").id, 10L)
+        dao.toggleVisited(rows.getValue("b").id, 10L, "")
+
+        assertEquals(listOf("a"), dao.observeFavoriteListItems().first().map { it.sourceKey })
+        assertEquals(listOf("b"), dao.observeVisitedListItems().first().map { it.sourceKey })
+        assertEquals(setOf("a", "b"), dao.getFavoritesAndVisited().map { it.sourceKey }.toSet())
     }
 }

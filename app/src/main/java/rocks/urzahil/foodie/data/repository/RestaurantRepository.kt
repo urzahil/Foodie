@@ -37,13 +37,17 @@ class RestaurantRepository(
     }
 
     private val downloader = MichelinCsvDownloader(context, dao)
-    private val scraper = MichelinPageScraper(context, dao)
+    private val scraper = MichelinPageScraper(dao)
 
     val syncState: StateFlow<SyncState> = downloader.syncState
 
     fun getLastCatalogueSyncTime(): Long = downloader.getLastSyncTime()
 
     val allRestaurants: Flow<List<RestaurantListItem>> = dao.getAllListItems()
+
+    val favoriteRestaurants: Flow<List<RestaurantListItem>> = dao.observeFavoriteListItems()
+
+    val visitedRestaurants: Flow<List<RestaurantListItem>> = dao.observeVisitedListItems()
 
     fun observeInBox(
         minLat: Double,
@@ -135,12 +139,15 @@ class RestaurantRepository(
         dao.toggleVisited(id, System.currentTimeMillis(), notes)
     }
 
+    suspend fun updateVisitedNotes(id: Long, notes: String) = withContext(Dispatchers.IO) {
+        dao.updateVisitedNotes(id, notes)
+    }
+
     suspend fun fetchRestaurantDetails(restaurant: RestaurantEntity): RestaurantEntity =
         scraper.fetchAndStoreDetails(restaurant)
 
     suspend fun exportFavoritesAndVisitedJson(): String = withContext(Dispatchers.IO) {
-        val all = dao.getAllDirect()
-        val exported = all.filter { it.isFavorite || it.isVisited }
+        val exported = dao.getFavoritesAndVisited()
 
         val root = JSONObject()
         root.put("app", "Foodie 2.0")
@@ -182,7 +189,7 @@ class RestaurantRepository(
                 if (version !in setOf(1, 2)) return@withContext null
 
                 val array = root.optJSONArray("restaurants") ?: return@withContext null
-                val all = dao.getAllDirect()
+                val all = dao.getMatchKeys()
                 val bySourceKey = all.associateBy { it.sourceKey }
                 val byUrl = all.filter { it.url.isNotBlank() }
                     .groupBy { it.url }

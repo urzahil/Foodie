@@ -36,10 +36,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -56,7 +58,6 @@ import rocks.urzahil.foodie.ui.RestaurantWithDistance
 import rocks.urzahil.foodie.ui.components.AwardBadge
 import rocks.urzahil.foodie.ui.theme.MichelinGold
 import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -101,28 +102,12 @@ fun RestaurantMapTab(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    var mapsInitialized by remember { mutableStateOf(false) }
 
     // The "my location" layer throws a SecurityException when enabled without a location
     // permission (e.g. first run after a fresh install), so only enable it once granted.
     var hasLocationPermission by remember { mutableStateOf(isLocationPermissionGranted(context)) }
     LaunchedEffect(activeLocation, mapRecenterTrigger) {
         hasLocationPermission = isLocationPermissionGranted(context)
-    }
-
-    LaunchedEffect(Unit) {
-        try {
-            MapsInitializer.initialize(
-                context.applicationContext,
-                MapsInitializer.Renderer.LATEST
-            ) {
-                mapsInitialized = true
-            }
-            mapsInitialized = true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize maps", e)
-            mapsInitialized = true
-        }
     }
 
     val initialPos = viewModel.lastMapCameraPosition?.target ?: LatLng(
@@ -135,8 +120,11 @@ fun RestaurantMapTab(
         position = CameraPosition.fromLatLngZoom(initialPos, initialZoom)
     }
 
-    LaunchedEffect(cameraPositionState.position) {
-        viewModel.lastMapCameraPosition = cameraPositionState.position
+    // Collect camera moves in a flow: reading the position directly in composition would
+    // recompose the whole map, markers included, on every frame of a pan or zoom.
+    LaunchedEffect(cameraPositionState) {
+        snapshotFlow { cameraPositionState.position }
+            .collect { viewModel.lastMapCameraPosition = it }
     }
 
     var selectedPreviewRestaurant by remember { mutableStateOf<RestaurantWithDistance?>(null) }
@@ -160,11 +148,12 @@ fun RestaurantMapTab(
         }
     }
 
-    val icon3Stars = remember(mapsInitialized) { getCategoryMarker("3 Stars") }
-    val icon2Stars = remember(mapsInitialized) { getCategoryMarker("2 Stars") }
-    val icon1Star = remember(mapsInitialized) { getCategoryMarker("1 Star") }
-    val iconBib = remember(mapsInitialized) { getCategoryMarker("Bib Gourmand") }
-    val iconSelected = remember(mapsInitialized) { getCategoryMarker("Selected") }
+    // MapsInitializer runs in FoodieApp.onCreate, so the bitmap factory is ready here.
+    val icon3Stars = remember { getCategoryMarker("3 Stars") }
+    val icon2Stars = remember { getCategoryMarker("2 Stars") }
+    val icon1Star = remember { getCategoryMarker("1 Star") }
+    val iconBib = remember { getCategoryMarker("Bib Gourmand") }
+    val iconSelected = remember { getCategoryMarker("Selected") }
 
     Box(modifier = modifier
         .fillMaxSize()
@@ -185,24 +174,30 @@ fun RestaurantMapTab(
         ) {
             restaurants.forEach { item ->
                 val r = item.restaurant
-                val markerIcon = when {
-                    r.award.contains("3 Star", ignoreCase = true) -> icon3Stars
-                    r.award.contains("2 Star", ignoreCase = true) -> icon2Stars
-                    r.award.contains("1 Star", ignoreCase = true) -> icon1Star
-                    r.award.contains("Bib", ignoreCase = true) -> iconBib
-                    else -> iconSelected
-                }
-
-                Marker(
-                    state = MarkerState(position = LatLng(r.latitude, r.longitude)),
-                    title = r.name,
-                    snippet = "${r.award} • ${r.cuisine}",
-                    icon = markerIcon,
-                    onClick = {
-                        selectedPreviewRestaurant = item
-                        true
+                // Keyed by id so a re-sorted or refreshed list reuses existing markers
+                // instead of rebinding every one of them.
+                key(r.id) {
+                    val markerIcon = when {
+                        r.award.contains("3 Star", ignoreCase = true) -> icon3Stars
+                        r.award.contains("2 Star", ignoreCase = true) -> icon2Stars
+                        r.award.contains("1 Star", ignoreCase = true) -> icon1Star
+                        r.award.contains("Bib", ignoreCase = true) -> iconBib
+                        else -> iconSelected
                     }
-                )
+
+                    Marker(
+                        state = remember(r.latitude, r.longitude) {
+                            MarkerState(position = LatLng(r.latitude, r.longitude))
+                        },
+                        title = r.name,
+                        snippet = "${r.award} • ${r.cuisine}",
+                        icon = markerIcon,
+                        onClick = {
+                            selectedPreviewRestaurant = item
+                            true
+                        }
+                    )
+                }
             }
         }
 

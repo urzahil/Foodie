@@ -1,7 +1,6 @@
 package rocks.urzahil.foodie.ui.components
 
 import android.net.Uri
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -45,37 +44,31 @@ fun ExportImportDialog(
     jsonText: String?,
     onDismiss: () -> Unit,
     onImport: (String) -> Unit,
-    onBackupResult: (Boolean, String) -> Unit = { _, _ -> }
+    onBackupResult: (String) -> Unit
 ) {
     val context = LocalContext.current
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
-    // File saver: writes JSON directly to selected file
+    // File saver: writes JSON directly to selected file. The result is reported through
+    // onBackupResult once the dialog has closed.
     val saveFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri: Uri? ->
         if (uri != null) {
-            if (!jsonText.isNullOrBlank()) {
+            val msg = if (!jsonText.isNullOrBlank()) {
                 try {
                     context.contentResolver.openOutputStream(uri)?.use { os ->
                         os.write(jsonText.toByteArray(Charsets.UTF_8))
                     }
-                    val msg = "Backup saved successfully!"
-                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    onBackupResult(true, msg)
-                    onDismiss()
+                    "Backup saved successfully!"
                 } catch (e: Exception) {
-                    val msg = "Failed to save backup: ${e.localizedMessage ?: "Unknown error"}"
-                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    onBackupResult(false, msg)
-                    onDismiss()
+                    "Failed to save backup: ${e.localizedMessage ?: "Unknown error"}"
                 }
             } else {
-                val msg = "Backup failed: No data available"
-                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                onBackupResult(false, msg)
-                onDismiss()
+                "Backup failed: No data available"
             }
+            onDismiss()
+            onBackupResult(msg)
         }
     }
 
@@ -91,14 +84,10 @@ fun ExportImportDialog(
                 if (!content.isNullOrBlank()) {
                     onImport(content)
                 } else {
-                    val msg = "Restore failed: Selected file is empty"
-                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    statusMessage = msg
+                    statusMessage = "Restore failed: Selected file is empty"
                 }
             } catch (e: Exception) {
-                val msg = "Failed to read file: ${e.localizedMessage ?: "Unknown error"}"
-                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                statusMessage = msg
+                statusMessage = "Failed to read file: ${e.localizedMessage ?: "Unknown error"}"
             }
         }
     }
@@ -162,6 +151,8 @@ fun ExportImportDialog(
                             onClick = {
                                 saveFileLauncher.launch("foodie_backup.json")
                             },
+                            // The export is prepared when the dialog opens.
+                            enabled = jsonText != null,
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
@@ -233,9 +224,9 @@ fun ExportImportDialog(
                     }
                 }
 
-                if (statusMessage != null) {
+                statusMessage?.let { message ->
                     Text(
-                        text = statusMessage!!,
+                        text = message,
                         color = MichelinGold,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium

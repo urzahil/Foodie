@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -78,9 +79,14 @@ fun RestaurantListTab(
         viewModel.preservedListOffset = 0
     }
 
-    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
-        viewModel.preservedListIndex = listState.firstVisibleItemIndex
-        viewModel.preservedListOffset = listState.firstVisibleItemScrollOffset
+    // Collect scroll changes in a flow: reading them directly in composition would
+    // recompose the whole tab on every scrolled pixel.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                viewModel.preservedListIndex = index
+                viewModel.preservedListOffset = offset
+            }
     }
 
     if (restaurants.isEmpty()) {

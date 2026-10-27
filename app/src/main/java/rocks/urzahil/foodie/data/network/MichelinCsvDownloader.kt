@@ -102,10 +102,7 @@ class MichelinCsvDownloader(
                         return@withContext false
                     }
 
-                    val body = response.body ?: run {
-                        _syncState.value = SyncState.Error("Empty response body")
-                        return@withContext false
-                    }
+                    val body = response.body
 
                     _syncState.value = SyncState.Syncing(0.1f, 0, "Parsing Michelin restaurants...")
 

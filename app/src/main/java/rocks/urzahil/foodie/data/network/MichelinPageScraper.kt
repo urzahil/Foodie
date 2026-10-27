@@ -105,7 +105,7 @@ class MichelinPageScraper(
                 // Also inspect JSON-LD openingHours values, but extract only time ranges from them.
                 val ld = JSON_LD_OPENING_HOURS.matcher(html)
                 while (ld.find()) {
-                    val raw = ld.group(1)
+                    val raw = ld.group(1) ?: continue
                     val values = QUOTED_VALUE.findAll(raw)
                         .map { it.groupValues[1] }
                         .toList()
@@ -153,8 +153,8 @@ class MichelinPageScraper(
                 .trim()
         }
 
-        private fun normalizeDay(value: String): String? {
-            return when (value.trim().lowercase()) {
+        private fun normalizeDay(value: String?): String? {
+            return when (value?.trim()?.lowercase()) {
                 "monday", "mon", "mo" -> "Monday"
                 "tuesday", "tue", "tues", "tu" -> "Tuesday"
                 "wednesday", "wed", "we" -> "Wednesday"
@@ -206,7 +206,7 @@ class MichelinPageScraper(
 
                     client.newCall(request).execute().use { response ->
                         if (response.isSuccessful) {
-                            val html = response.body?.string().orEmpty()
+                            val html = response.body.string()
                             if (imageMissing) scrapedImageUrl = extractImageUrl(html)
                             if (hoursExpired) extractedHours = parseOpeningHours(html)
                         }
@@ -227,7 +227,7 @@ class MichelinPageScraper(
 
                         client.newCall(proxyReq).execute().use { proxyResp ->
                             if (proxyResp.isSuccessful) {
-                                val content = proxyResp.body?.string().orEmpty()
+                                val content = proxyResp.body.string()
                                 if (imageMissing && scrapedImageUrl == null) {
                                     scrapedImageUrl = extractImageUrl(content)
                                 }

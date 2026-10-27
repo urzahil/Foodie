@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,7 +68,6 @@ import rocks.urzahil.foodie.ui.theme.MichelinGold
 import rocks.urzahil.foodie.ui.theme.MichelinRed
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +76,7 @@ fun MainScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val locale = LocalLocale.current.platformLocale
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val filteredList by viewModel.filteredRestaurants.collectAsStateWithLifecycle()
     val availableCuisines by viewModel.availableCuisines.collectAsStateWithLifecycle()
@@ -302,10 +303,7 @@ fun MainScreen(
                                         )
                                         Text(
                                             text = if (lastCatalogueSyncTime > 0L) {
-                                                SimpleDateFormat(
-                                                    "d MMM yyyy, HH:mm",
-                                                    Locale.getDefault()
-                                                )
+                                                SimpleDateFormat("d MMM yyyy, HH:mm", locale)
                                                     .format(Date(lastCatalogueSyncTime))
                                             } else {
                                                 "Never"

@@ -17,6 +17,7 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -303,6 +304,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         return FilteredResult(capped, cuisines)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private val filteredResult: StateFlow<FilteredResult> = filterParams
         .flatMapLatest { params ->
             candidatesFor(params)
@@ -323,6 +325,7 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
         .map { it.availableCuisines }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     val selectedRestaurant: StateFlow<RestaurantEntity?> = _uiState
         .map { it.selectedRestaurantId }
         .distinctUntilChanged()

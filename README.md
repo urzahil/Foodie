@@ -15,8 +15,8 @@ An Android app for finding Michelin Guide restaurants and keeping track of the o
 
 ## How it works
 
-- **Catalogue:** the app downloads the restaurant data from the community-maintained [michelin-my-maps](https://github.com/ngshiheng/michelin-my-maps) CSV and stores it in a local Room database. It re-syncs when the table is empty or the last sync is more than 7 days old. A sync is rejected if the new file has fewer than 80% of the existing rows, so a truncated download cannot wipe the catalogue.
-- **Images and opening hours:** these are fetched from each restaurant's Michelin Guide page and cached locally. Hours are refreshed after 30 days.
+- **Catalogue:** the app downloads the restaurant data from the community-maintained [michelin-my-maps](https://github.com/ngshiheng/michelin-my-maps) CSV and stores it in a local Room database. 
+- **Images and opening hours:** these are fetched from each restaurant's Michelin Guide page and cached locally.
 - **User data:** favourites, visited flags and notes live in the same database and are kept across catalogue syncs.
 
 ## Data and attribution

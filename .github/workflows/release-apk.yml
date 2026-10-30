@@ -71,13 +71,19 @@ jobs:
           cp "$aab_path" dist/Foodie-release.aab
           test -s dist/Foodie-release.aab
 
-      - name: Upload release artifacts
+      - name: Upload release APK artifact
         uses: actions/upload-artifact@v7
         with:
           name: Foodie-release-${{ github.run_number }}
-          path: |
-            dist/Foodie-release.apk
-            dist/Foodie-release.aab
+          path: dist/Foodie-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Google Play AAB artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Foodie-play-aab-${{ github.run_number }}
+          path: dist/Foodie-release.aab
           if-no-files-found: error
           retention-days: 30
 

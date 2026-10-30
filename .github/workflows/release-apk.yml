@@ -49,16 +49,16 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.p12"
           test -s "$RUNNER_TEMP/release.p12"
 
-      - name: Build signed release APK
+      - name: Build signed release APK and AAB
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/release.p12
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
-        run: ./gradlew clean testDebugUnitTest assembleRelease --no-daemon
+        run: ./gradlew clean testDebugUnitTest assembleRelease bundleRelease --no-daemon
 
-      - name: Prepare release APK
+      - name: Prepare release artifacts
         run: |
           set -eu
           mkdir -p dist
@@ -66,12 +66,18 @@ jobs:
           test -n "$apk_path" || { echo "No release APK was produced"; exit 1; }
           cp "$apk_path" dist/Foodie-release.apk
           test -s dist/Foodie-release.apk
+          aab_path="$(find app/build/outputs/bundle/release -maxdepth 1 -type f -name '*.aab' -print -quit)"
+          test -n "$aab_path" || { echo "No release AAB was produced"; exit 1; }
+          cp "$aab_path" dist/Foodie-release.aab
+          test -s dist/Foodie-release.aab
 
-      - name: Upload release APK artifact
+      - name: Upload release artifacts
         uses: actions/upload-artifact@v7
         with:
           name: Foodie-release-${{ github.run_number }}
-          path: dist/Foodie-release.apk
+          path: |
+            dist/Foodie-release.apk
+            dist/Foodie-release.aab
           if-no-files-found: error
           retention-days: 30
 
@@ -82,5 +88,6 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             dist/Foodie-release.apk \
+            dist/Foodie-release.aab \
             --generate-notes \
             --title "$GITHUB_REF_NAME"

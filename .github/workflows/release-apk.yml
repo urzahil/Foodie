@@ -1,4 +1,4 @@
-name: Build Foodie Release APK
+name: Build Foodie Release APK and AAB
 
 on:
   workflow_dispatch:

@@ -69,6 +69,6 @@ val MdThemeLightOutlineVariant = Color(0xFFD8C2BF)
 
 val MdThemeLightSurfaceContainerLowest = Color(0xFFFFFFFF)
 val MdThemeLightSurfaceContainerLow = Color(0xFFFFF0EE)
-val MdThemeLightSurfaceContainer = Color(0xFFFAEA88)
+val MdThemeLightSurfaceContainer = Color(0xFFFAEAE8)
 val MdThemeLightSurfaceContainerHigh = Color(0xFFF4E4E2)
 val MdThemeLightSurfaceContainerHighest = Color(0xFFEEE0DE)

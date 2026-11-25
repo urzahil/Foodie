@@ -288,7 +288,10 @@ class FoodieViewModel(application: Application) : AndroidViewModel(application) 
 
         val finalItems = if (!params.cuisine.isNullOrBlank()) {
             val selected = params.cuisine.trim()
-            withDistance.filter { it.restaurant.cuisine.contains(selected, ignoreCase = true) }
+            withDistance.filter { item ->
+                item.restaurant.cuisine.split(",", "/", "&")
+                    .any { it.trim().equals(selected, ignoreCase = true) }
+            }
         } else {
             withDistance
         }

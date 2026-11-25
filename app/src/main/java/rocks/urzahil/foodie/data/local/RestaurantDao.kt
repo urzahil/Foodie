@@ -125,12 +125,12 @@ interface RestaurantDao {
         notes: String
     )
 
+    // Notes are kept when un-visiting so an accidental tap loses nothing.
     @Query(
         """
         UPDATE restaurants
         SET isVisited = NOT isVisited,
             visitedTimestamp = CASE WHEN isVisited = 0 THEN :timestamp ELSE 0 END,
-            // Keep existing notes when un-visiting so an accidental tap loses nothing.
             visitedNotes = CASE WHEN isVisited = 0 AND :notes != '' THEN :notes ELSE visitedNotes END
         WHERE id = :id
     """

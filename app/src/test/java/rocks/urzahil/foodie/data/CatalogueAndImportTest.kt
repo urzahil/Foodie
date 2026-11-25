@@ -102,6 +102,27 @@ class CatalogueAndImportTest {
     }
 
     @Test
+    fun `importing an empty backup fails and keeps existing user state`() = runBlocking {
+        dao.applyCatalogue(listOf(restaurant("a")), syncToken = 1L)
+        dao.toggleFavorite(dao.getAllDirect().single().id, 10L)
+
+        assertNull(repository.importFavoritesAndVisitedJson(backup()))
+        assertTrue(dao.getAllDirect().single().isFavorite)
+    }
+
+    @Test
+    fun `un-visiting keeps notes and re-visiting from card keeps them too`() = runBlocking {
+        dao.applyCatalogue(listOf(restaurant("a")), syncToken = 1L)
+        val id = dao.getAllDirect().single().id
+        dao.toggleVisited(id, 10L, "lovely")
+        dao.toggleVisited(id, 11L, "")
+        assertEquals("lovely", dao.getAllDirect().single().visitedNotes)
+        dao.toggleVisited(id, 12L, "")
+        assertTrue(dao.getAllDirect().single().isVisited)
+        assertEquals("lovely", dao.getAllDirect().single().visitedNotes)
+    }
+
+    @Test
     fun `export includes sourceKey and round-trips through import`() = runBlocking {
         dao.applyCatalogue(listOf(restaurant("a")), syncToken = 1L)
         dao.toggleFavorite(dao.getAllDirect().single().id, 10L)

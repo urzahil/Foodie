@@ -232,8 +232,8 @@ class RestaurantRepository(
                 }
 
                 // Restoring replaces current user state, so never do it for a file where
-                // nothing could be matched.
-                if (states.isEmpty() && skipped > 0) return@withContext null
+                // nothing could be matched or that contains no entries at all.
+                if (states.isEmpty()) return@withContext null
 
                 dao.restoreUserState(states)
                 ImportResult(

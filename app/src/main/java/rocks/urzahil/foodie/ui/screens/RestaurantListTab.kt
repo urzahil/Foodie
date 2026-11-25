@@ -63,6 +63,7 @@ fun RestaurantListTab(
     viewModel: FoodieViewModel,
     onRestaurantClick: (RestaurantListItem) -> Unit,
     onSelectCity: (String, Double, Double) -> Unit,
+    onNearMeClicked: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
@@ -93,7 +94,7 @@ fun RestaurantListTab(
         EmptyListState(
             activeLocation = activeLocation,
             onSelectCity = onSelectCity,
-            onNearMeClicked = { viewModel.onNearMeClicked() },
+            onNearMeClicked = onNearMeClicked,
             modifier = modifier
         )
     } else {
